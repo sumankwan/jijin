@@ -279,8 +279,6 @@ def main():
             Gtree = G.subgraph(tree_nodes).copy()
         st.info(f"Menampilkan struktur dari: {selected_root}")
         fig = create_visualization(Gtree)
-        if st.button('Tekan untuk Simulasi Error'):
-            raise Exception('Simulasi error: Ini hanya contoh error untuk menurunkan ekspektasi atasan.')
         selected_points = plotly_events(fig, click_event=True, select_event=False, override_height=600, override_width='100%')
         node_clicked = None
         if selected_points:
