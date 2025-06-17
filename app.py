@@ -52,14 +52,19 @@ def create_network_graph(companies: List[Dict]):
             G.add_edge(company['parent_id'], company['id'])
     return G
 
-def vertical_tree_layout(G, root=None, x=0, y=0, dx=1.0, level_gap=1.5, pos=None, level=0):
+def vertical_tree_layout(G, root=None, x=0, y=0, dx=1.0, level_gap=1.5, pos=None, level=0, visited=None):
     if pos is None:
         pos = {}
+    if visited is None:
+        visited = set()
     if root is None:
         roots = [n for n, d in G.in_degree() if d == 0]
         if not roots:
             raise ValueError("No root found for vertical tree layout.")
         root = roots[0]
+    if root in visited:
+        return pos
+    visited.add(root)
     pos[root] = (x, y)
     children = list(G.successors(root))
     if children:
@@ -72,44 +77,81 @@ def vertical_tree_layout(G, root=None, x=0, y=0, dx=1.0, level_gap=1.5, pos=None
                 dx=dx/1.5,
                 level_gap=level_gap,
                 pos=pos,
-                level=level+1
+                level=level+1,
+                visited=visited
             )
     return pos
 
-def create_visualization(G):
+def create_visualization(G, force_hierarchical=False):
     try:
-        pos = nx.nx_agraph.graphviz_layout(G, prog='dot', args='-Grankdir=TB -Gnodesep=2.0 -Granksep=2.5')
+        if force_hierarchical:
+            try:
+                # Increase ranksep for more vertical spacing
+                pos = nx.nx_agraph.graphviz_layout(G, prog='dot', args='-Grankdir=TB -Gnodesep=3.5 -Granksep=4.5')
+            except Exception:
+                pos = vertical_tree_layout(G, level_gap=4.0)  # More vertical spacing
+        else:
+            # Compute layout for each weakly connected component
+            pos = {}
+            for component in nx.weakly_connected_components(G):
+                subgraph = G.subgraph(component)
+                try:
+                    sub_pos = nx.nx_agraph.graphviz_layout(subgraph, prog='dot', args='-Grankdir=TB -Gnodesep=3.0 -Granksep=3.0')
+                except Exception:
+                    try:
+                        sub_pos = vertical_tree_layout(subgraph, level_gap=3.0)
+                    except Exception:
+                        sub_pos = nx.spring_layout(subgraph, k=10, iterations=300)
+                pos.update(sub_pos)
     except Exception:
-        pos = vertical_tree_layout(G)
-    # Custom horizontal spreading for each y-level
+        pos = nx.spring_layout(G, k=10, iterations=300)
+    # Assign default positions to any node missing from pos
+    missing_nodes = set(G.nodes()) - set(pos.keys())
+    if missing_nodes:
+        print(f"Missing nodes in pos: {missing_nodes}")
+        y_min = min((y for x, y in pos.values()), default=0)
+        for i, node in enumerate(missing_nodes):
+            pos[node] = (i * 10, y_min - 20)
+    print(f"Nodes in G: {list(G.nodes())}")
+    print(f"Nodes in pos: {list(pos.keys())}")
     y_to_nodes = defaultdict(list)
     for node, (x, y) in pos.items():
         y_to_nodes[y].append((x, node))
     for y, x_nodes in y_to_nodes.items():
-        x_nodes_sorted = sorted(x_nodes)  # sort by x
+        x_nodes_sorted = sorted(x_nodes)
         n = len(x_nodes_sorted)
         if n > 1:
-            spread = max(8, n * 2)  # wider spread for more nodes
+            spread = max(8, n * 2)
             for i, (orig_x, node) in enumerate(x_nodes_sorted):
-                # Evenly distribute from -spread/2 to +spread/2
                 new_x = -spread/2 + i * (spread/(n-1)) if n > 1 else 0
                 pos[node] = (new_x, y)
-    edge_x, edge_y = [], []
+    edge_x, edge_y, edge_text = [], [], []
     for edge in G.edges():
         x0, y0 = pos[edge[0]]
         x1, y1 = pos[edge[1]]
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
+        perc = G.edges[edge].get('percentage', None)
+        if perc is not None:
+            try:
+                perc_int = int(round(float(perc)))
+            except Exception:
+                perc_int = perc
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            edge_text.append(dict(x=mx, y=my, text=f"<b>{perc_int}%</b>", showarrow=False, font=dict(color='red', size=9), align='center'))
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
         line=dict(width=3, color='#B0B0B0'),
         hoverinfo='none',
         mode='lines'
     )
-    # Make sure node lists are initialized before use
+    # Use a single node_order for all node-related arrays
+    node_order = list(G.nodes())
     node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
-    nodes = list(G.nodes())
-    for node in nodes:
+    for node in node_order:
+        if node not in pos:
+            print(f"Warning: Node '{node}' not in pos, skipping.")
+            continue
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
@@ -117,23 +159,25 @@ def create_visualization(G):
         children = list(G.successors(node))
         parent_str = ', '.join(parents) if parents else '-'
         child_str = ', '.join(children) if children else '-'
+        name = G.nodes[node].get('name', node)
         hover_text = (
-            f"<b style='color:white'>{node}</b><br>"
+            f"<b style='color:white'>{name}</b><br>"
             f"<span style='color:white'>Induk: {parent_str}<br>Anak Perusahaan: {child_str}</span>"
         )
         node_text.append(hover_text)
         node_labels.append(node)
         if not parents:
-            node_colors.append('#1976D2')  # Blue for parent
+            node_colors.append('#1976D2')
             node_sizes.append(50)
         else:
-            node_colors.append('#43A047')  # Green for subsidiaries
+            node_colors.append('#43A047')
             node_sizes.append(35)
     node_trace = go.Scatter(
         x=node_x, y=node_y,
         mode='markers+text',
         hoverinfo='text',
         text=node_labels,
+        customdata=node_labels,
         textfont=dict(color='white', size=12, family='Arial'),
         textposition="bottom center",
         marker=dict(
@@ -158,10 +202,11 @@ def create_visualization(G):
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor='#181825',
-            paper_bgcolor='#181825'
+            paper_bgcolor='#181825',
+            annotations=edge_text
         )
     )
-    return fig
+    return fig, node_order, pos
 
 def show_document_details(company_id: int):
     """Display document details for a selected company"""
@@ -195,7 +240,7 @@ def abbreviate_company(name):
 def read_ownership_excel(filepath):
     df = pd.read_excel(filepath)
     df.columns = [c.strip() for c in df.columns]
-    expected_cols = ['Company', 'Shareholder', 'Sheet']
+    expected_cols = ['Subsidiary', 'Shareholder', 'Ownership_Percentage']
     missing = [col for col in expected_cols if col not in df.columns]
     if missing:
         st.error(f"Missing columns: {missing}")
@@ -204,103 +249,232 @@ def read_ownership_excel(filepath):
 
     # Build mapping from abbreviation to full name
     abbr_to_full = {}
-    for col in ['Company', 'Shareholder', 'Sheet']:
+    all_abbrs = set()
+    for col in ['Subsidiary', 'Shareholder']:
         for name in df[col].dropna().unique():
             abbr = abbreviate_company(str(name).strip())
-            abbr_to_full[abbr] = str(name).strip()
-
-    company_abbrs = set(abbreviate_company(str(name).strip()) for name in df['Company'].dropna().unique())
-    company_abbrs.update(abbreviate_company(str(name).strip()) for name in df['Sheet'].dropna().unique())
-    company_abbrs.update(['ACG', 'AGG'])
-
-    all_possible_abbrs = set()
-    for col in ['Company', 'Shareholder', 'Sheet']:
-        all_possible_abbrs.update(
-            abbreviate_company(str(name).strip()) for name in df[col].dropna().unique()
-        )
-    all_possible_abbrs.update(['ACG', 'AGG'])
+            if abbr:
+                abbr_to_full[abbr] = str(name).strip()
+                all_abbrs.add(abbr)
 
     G = nx.DiGraph()
-    for abbr in all_possible_abbrs:
-        if abbr in company_abbrs or abbr in ['ACG', 'AGG']:
-            G.add_node(abbr, name=abbr_to_full.get(abbr, abbr))  # Store full name for hover/info
+    for abbr in all_abbrs:
+        G.add_node(abbr, name=abbr_to_full.get(abbr, abbr))
 
     for _, row in df.iterrows():
-        company = abbreviate_company(str(row['Company']).strip())
-        shareholder = abbreviate_company(str(row['Shareholder']).strip())
-        sheet = abbreviate_company(str(row['Sheet']).strip())
-        # Edge from Sheet to Company
-        if (sheet in G.nodes) and (company in G.nodes) and sheet != company:
-            G.add_edge(sheet, company)
-        # Edge from Shareholder to Company
-        if (shareholder in G.nodes) and (company in G.nodes) and shareholder != company:
-            G.add_edge(shareholder, company)
+        sub = abbreviate_company(str(row['Subsidiary']).strip())
+        shr = abbreviate_company(str(row['Shareholder']).strip())
+        perc = row['Ownership_Percentage']
+        if not sub or not shr:
+            print(f"Skipping edge with empty abbreviation: Shareholder='{row['Shareholder']}', Subsidiary='{row['Subsidiary']}'")
+            continue
+        if (shr in G.nodes) and (sub in G.nodes) and shr != sub:
+            G.add_edge(shr, sub, percentage=perc)
+        else:
+            if shr not in G.nodes or sub not in G.nodes:
+                print(f"Warning: Edge references missing node(s): Shareholder='{shr}', Subsidiary='{sub}'")
 
-    for col in ['Company', 'Shareholder', 'Sheet']:
-        for name in df[col].dropna().unique():
-            if len(str(name).split()) > 1:
-                print(f"Multi-name cell in {col}: {name}")
-
-    master_nodes = [abbr for abbr in ['ACG', 'AGG'] if abbr in G.nodes]
+    master_nodes = [n for n, d in G.in_degree() if d == 0]
+    print(f"All node abbreviations: {list(G.nodes())}")
+    print(f"All edges: {list(G.edges())}")
     return G, master_nodes
+
+def create_visualization_subgraph(G):
+    try:
+        # Try dot layout first
+        pos = nx.nx_agraph.graphviz_layout(G, prog='dot', args='-Grankdir=TB -Gnodesep=3.5 -Granksep=4.5')
+    except Exception as e:
+        print(f"Dot layout failed: {e}")
+        try:
+            # Try vertical tree layout
+            pos = vertical_tree_layout(G, level_gap=4.0)
+        except Exception as e:
+            print(f"Vertical tree layout failed: {e}")
+            # Fallback to spring layout
+            pos = nx.spring_layout(G, k=10, iterations=300)
+    
+    # Ensure all nodes have positions
+    missing_nodes = set(G.nodes()) - set(pos.keys())
+    if missing_nodes:
+        print(f"Missing nodes in pos: {missing_nodes}")
+        y_min = min((y for x, y in pos.values()), default=0)
+        for i, node in enumerate(missing_nodes):
+            pos[node] = (i * 10, y_min - 20)
+    edge_x, edge_y, edge_text = [], [], []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        perc = G.edges[edge].get('percentage', None)
+        if perc is not None:
+            try:
+                perc_int = int(round(float(perc)))
+            except Exception:
+                perc_int = perc
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            edge_text.append(dict(x=mx, y=my, text=f"<b>{perc_int}%</b>", showarrow=False, font=dict(color='red', size=18), align='center'))
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=3, color='#B0B0B0'),
+        hoverinfo='none',
+        mode='lines'
+    )
+    node_order = list(G.nodes())
+    node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
+    for node in node_order:
+        if node not in pos:
+            continue
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        parents = list(G.predecessors(node))
+        children = list(G.successors(node))
+        parent_str = ', '.join(parents) if parents else '-'
+        child_str = ', '.join(children) if children else '-'
+        name = G.nodes[node].get('name', node)
+        hover_text = (
+            f"<b style='color:white'>{name}</b><br>"
+            f"<span style='color:white'>Induk: {parent_str}<br>Anak Perusahaan: {child_str}</span>"
+        )
+        node_text.append(hover_text)
+        node_labels.append(node)
+        if not parents:
+            node_colors.append('#1976D2')
+            node_sizes.append(50)
+        else:
+            node_colors.append('#43A047')
+            node_sizes.append(35)
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        hoverinfo='text',
+        text=node_labels,
+        customdata=node_labels,
+        textfont=dict(color='white', size=12, family='Arial'),
+        textposition="bottom center",
+        marker=dict(
+            showscale=False,
+            color=node_colors,
+            size=node_sizes,
+            line=dict(width=6, color='#FFFFFF'),
+            opacity=0.95,
+            symbol='circle'
+        )
+    )
+    node_trace.text = node_labels
+    node_trace.hovertext = node_text
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            font=dict(color='white', size=18, family='Arial'),
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=40, l=20, r=20, t=40),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            plot_bgcolor='#181825',
+            paper_bgcolor='#181825',
+            annotations=edge_text
+        )
+    )
+    return fig, node_order, pos
 
 def main():
     try:
-        excel_path = 'holding_structure_table.xlsx'
-        skipped_edges_global = []
+        excel_path = 'corporate_structure_analysis_v2.xlsx'
         if os.path.exists(excel_path):
-            G, master_nodes = read_ownership_excel(excel_path)
+            G, _ = read_ownership_excel(excel_path)
             if G is None:
                 return
         else:
             st.error(f"File '{excel_path}' not found.")
             return
-        roots = [n for n in master_nodes if n in G.nodes]
+        # Only show descendants of selected root (ACG or AGG)
+        roots = [n for n in ['ACG', 'AGG'] if n in G.nodes]
         if not roots:
-            st.error("No master root node found to visualize.")
+            st.error("No ACG or AGG node found in the graph.")
             return
-        selected_root = roots[0]
-        if len(roots) > 1:
-            selected_root = st.selectbox("Pilih root perusahaan untuk divisualisasikan:", roots)
-        # Toggle for 2-level or full tree
-        show_two_levels = st.toggle('2 Level Saja (Root & Anak Perusahaan Langsung)', value=False)
-        if show_two_levels:
-            # Only show root and its direct children
-            direct_children = list(G.successors(selected_root))
-            nodes_to_show = [selected_root] + direct_children
-            edges_to_show = [(selected_root, child) for child in direct_children]
-            Gtree = nx.DiGraph()
-            for n in nodes_to_show:
-                Gtree.add_node(n, **G.nodes[n])
-            for e in edges_to_show:
-                Gtree.add_edge(*e)
-        else:
-            tree_nodes = nx.descendants(G, selected_root) | {selected_root}
-            Gtree = G.subgraph(tree_nodes).copy()
+        selected_root = st.selectbox("Pilih root perusahaan (ACG/AGG):", roots)
+        # Get all descendants (subtree) of the selected root
+        tree_nodes = nx.descendants(G, selected_root) | {selected_root}
+        Gtree = G.subgraph(tree_nodes).copy()
         st.info(f"Menampilkan struktur dari: {selected_root}")
-        fig = create_visualization(Gtree)
-        selected_points = plotly_events(fig, click_event=True, select_event=False, override_height=600, override_width='100%')
+        fig, node_order, pos = create_visualization(Gtree, force_hierarchical=True)
+        selected_points = plotly_events(fig, click_event=True, select_event=False, override_height=800, override_width='100%')
         node_clicked = None
         if selected_points:
-            idx = selected_points[0]['pointIndex']
-            node_clicked = list(Gtree.nodes())[idx]
-        show_node = node_clicked if node_clicked else selected_root
-        details = G.nodes[show_node]
-        st.markdown("---")
-        st.markdown(f"### Informasi {show_node}")
-        st.markdown(f"**Direktur Utama:** {details.get('direktur_utama', '-') if 'direktur_utama' in details else '-'}")
-        st.markdown(f"**Direktur:** {details.get('direktur', '-') if 'direktur' in details else '-'}")
-        st.markdown(f"**Komisaris Utama:** {details.get('komisaris_utama', '-') if 'komisaris_utama' in details else '-'}")
-        st.markdown(f"**Komisaris:** {details.get('komisaris', '-') if 'komisaris' in details else '-'}")
-        st.markdown(f"**Modal:** {details.get('modal', '-') if 'modal' in details else '-'}")
-        skipped_edges = []
-        if hasattr(G, 'skipped_edges') and G.skipped_edges:
-            skipped_edges = G.skipped_edges
-        if skipped_edges:
-            skipped_str = f"Skipped edges due to non-company shareholders: {skipped_edges[:5]}"
-            if len(skipped_edges) > 5:
-                skipped_str += " ..."
-            st.markdown(f'<div style="font-size:12px; color:#ccc; margin-top:4em;">{skipped_str}</div>', unsafe_allow_html=True)
+            label = selected_points[0].get('customdata') or selected_points[0].get('text')
+            if not label:
+                # Fallback: try to match by x/y position if label is None
+                x = selected_points[0].get('x')
+                y = selected_points[0].get('y')
+                for node, (x_pos, y_pos) in pos.items():
+                    if abs(x_pos - x) < 1e-6 and abs(y_pos - y) < 1e-6:
+                        label = node
+                        break
+            if label and label in Gtree.nodes:
+                node_clicked = label
+            else:
+                st.warning(f"Clicked node label '{label}' not found in graph nodes.")
+        show_node = node_clicked if node_clicked else None
+        if show_node:
+            try:
+                details = {}
+                # Try to get details from Gtree first
+                if show_node in Gtree.nodes:
+                    details = Gtree.nodes[show_node]
+                # Then try G if not found
+                elif show_node in G.nodes:
+                    details = G.nodes[show_node]
+                # Finally try subG if it exists
+                elif 'subG' in locals() and show_node in subG.nodes:
+                    details = subG.nodes[show_node]
+                
+                st.markdown("---")
+                st.markdown(f"### Informasi {show_node}")
+                # Use get() with fallback values for all attributes
+                st.markdown(f"**Nama Lengkap:** {details.get('name', show_node)}")
+                st.markdown(f"**Direktur Utama:** {details.get('direktur_utama', '-')}")
+                st.markdown(f"**Direktur:** {details.get('direktur', '-')}")
+                st.markdown(f"**Komisaris Utama:** {details.get('komisaris_utama', '-')}")
+                st.markdown(f"**Komisaris:** {details.get('komisaris', '-')}")
+                st.markdown(f"**Modal:** {details.get('modal', '-')}")
+            except Exception as e:
+                st.warning(f"Terjadi kesalahan saat menampilkan info node: {e}")
+            # Show clear ownership table: 2 rows, owner and subsidiary
+            direct_owners = []
+            direct_subsidiaries = []
+            for u, v, d in Gtree.edges(data=True):
+                if v == show_node:
+                    direct_owners.append((u, v, d))
+                if u == show_node:
+                    direct_subsidiaries.append((u, v, d))
+            # Draw a second graph for direct ownership structure
+            if direct_owners or direct_subsidiaries:
+                subG = nx.DiGraph()
+                # First, add all nodes with their attributes
+                for u, v, d in direct_owners + direct_subsidiaries:
+                    for node in [u, v]:
+                        if node not in subG.nodes:
+                            # Get attributes from Gtree, with fallback to G if not found
+                            attrs = Gtree.nodes.get(node, {})
+                            if not attrs and node in G.nodes:
+                                attrs = G.nodes[node]
+                            # Ensure name attribute exists
+                            if 'name' not in attrs:
+                                attrs['name'] = node
+                            subG.add_node(node, **attrs)
+                # Then add all edges
+                for u, v, d in direct_owners + direct_subsidiaries:
+                    subG.add_edge(u, v, **d)
+                print(f"Subgraph nodes: {list(subG.nodes())}")
+                print(f"Subgraph edges: {list(subG.edges())}")
+                try:
+                    fig2, _, _ = create_visualization_subgraph(subG)
+                    st.plotly_chart(fig2, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Terjadi kesalahan saat menampilkan subgraph: {e}")
     except Exception as e:
         st.markdown(f'<div style="font-size:12px; color:#f88; margin-top:4em;">Terjadi kesalahan: {str(e)}</div>', unsafe_allow_html=True)
 
