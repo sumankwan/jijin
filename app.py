@@ -195,7 +195,7 @@ def create_visualization(G, force_hierarchical=False):
     fig = go.Figure(
         data=[edge_trace, node_trace],
         layout=go.Layout(
-            title={'text': 'Struktur Ayoda Capital Group', 'font': {'size': 28}},
+            # title={'text': 'Struktur Ayoda Capital Group', 'font': {'size': 28}},
             font=dict(color='white', size=18, family='Arial'),
             showlegend=False,
             hovermode='closest',
@@ -425,9 +425,14 @@ def main():
 
         st.markdown("---")
         st.markdown('<div style="text-align:center; font-size:1.2em; font-weight:bold; margin-bottom:0.5em;">Pilih Perusahaan</div>', unsafe_allow_html=True)
-        all_nodes = sorted(list(Gtree.nodes()))
-        selected_node = st.selectbox("", all_nodes, index=all_nodes.index(node_clicked) if node_clicked else 0, label_visibility="collapsed")
-        
+        # Build mapping from abbreviation to full name for dropdown
+        abbr_to_full = {node: Gtree.nodes[node].get('name', node) for node in Gtree.nodes}
+        full_to_abbr = {v: k for k, v in abbr_to_full.items()}
+        all_full_names = [abbr_to_full[node] for node in sorted(Gtree.nodes())]
+        # Determine default selection (full name) based on node_clicked (abbr)
+        default_full_name = abbr_to_full[node_clicked] if node_clicked else all_full_names[0]
+        selected_full_name = st.selectbox("", all_full_names, index=all_full_names.index(default_full_name), label_visibility="collapsed")
+        selected_node = full_to_abbr[selected_full_name]
         # Display selected node info (no headings)
         if selected_node:
             try:
@@ -438,7 +443,6 @@ def main():
                 st.markdown(f"**Komisaris Utama:** {details.get('komisaris_utama', '-')}")
                 st.markdown(f"**Komisaris:** {details.get('komisaris', '-')}")
                 st.markdown(f"**Modal:** {details.get('modal', '-')}")
-                
                 # Show direct ownership structure
                 direct_owners = []
                 direct_subsidiaries = []
@@ -447,25 +451,20 @@ def main():
                         direct_owners.append((u, v, d))
                     if u == selected_node:
                         direct_subsidiaries.append((u, v, d))
-                
                 if direct_owners or direct_subsidiaries:
                     subG = nx.DiGraph()
                     # First, add all nodes with their attributes
                     for u, v, d in direct_owners + direct_subsidiaries:
                         for node in [u, v]:
                             if node not in subG.nodes:
-                                # Get attributes from Gtree, with fallback to G if not found
                                 attrs = Gtree.nodes.get(node, {})
                                 if not attrs and node in G.nodes:
                                     attrs = G.nodes[node]
-                                # Ensure name attribute exists
                                 if 'name' not in attrs:
                                     attrs['name'] = node
                                 subG.add_node(node, **attrs)
-                    # Then add all edges
                     for u, v, d in direct_owners + direct_subsidiaries:
                         subG.add_edge(u, v, **d)
-                    
                     try:
                         fig2, _, _ = create_visualization_subgraph(subG)
                         st.plotly_chart(fig2, use_container_width=True)
