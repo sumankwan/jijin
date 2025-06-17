@@ -22,10 +22,10 @@ st.set_page_config(
 API_URL = "http://localhost:8000"  # Change this in production
 
 # Title and description
-st.title("Ayoda Capital Group - Visualisasi Struktur Perusahaan")
-st.markdown("""
-Dashboard ini menampilkan struktur kepemilikan dari Ayoda Capital Group dan anak perusahaannya.
-""")
+st.title("Ayoda Capital Group - Struktur Organisasi")
+# st.markdown("""
+# Dashboard ini menampilkan struktur kepemilikan dari Ayoda Capital Group dan anak perusahaannya.
+# """)
 
 def fetch_companies() -> List[Dict]:
     """Fetch companies from the API"""
@@ -86,25 +86,26 @@ def create_visualization(G, force_hierarchical=False):
     try:
         if force_hierarchical:
             try:
-                # Increase ranksep for more vertical spacing
-                pos = nx.nx_agraph.graphviz_layout(G, prog='dot', args='-Grankdir=TB -Gnodesep=3.5 -Granksep=4.5')
-            except Exception:
-                pos = vertical_tree_layout(G, level_gap=4.0)  # More vertical spacing
+                # Try vertical tree layout first (doesn't require pygraphviz)
+                pos = vertical_tree_layout(G, level_gap=8.0)  # Increased vertical spacing
+            except Exception as e:
+                print(f"Vertical tree layout failed: {e}")
+                # Fallback to spring layout
+                pos = nx.spring_layout(G, k=20, iterations=300)
         else:
             # Compute layout for each weakly connected component
             pos = {}
             for component in nx.weakly_connected_components(G):
                 subgraph = G.subgraph(component)
                 try:
-                    sub_pos = nx.nx_agraph.graphviz_layout(subgraph, prog='dot', args='-Grankdir=TB -Gnodesep=3.0 -Granksep=3.0')
+                    sub_pos = vertical_tree_layout(subgraph, level_gap=8.0)
                 except Exception:
-                    try:
-                        sub_pos = vertical_tree_layout(subgraph, level_gap=3.0)
-                    except Exception:
-                        sub_pos = nx.spring_layout(subgraph, k=10, iterations=300)
+                    sub_pos = nx.spring_layout(subgraph, k=20, iterations=300)
                 pos.update(sub_pos)
-    except Exception:
-        pos = nx.spring_layout(G, k=10, iterations=300)
+    except Exception as e:
+        print(f"Layout failed: {e}")
+        pos = nx.spring_layout(G, k=20, iterations=300)
+
     # Assign default positions to any node missing from pos
     missing_nodes = set(G.nodes()) - set(pos.keys())
     if missing_nodes:
@@ -203,7 +204,8 @@ def create_visualization(G, force_hierarchical=False):
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor='#181825',
             paper_bgcolor='#181825',
-            annotations=edge_text
+            annotations=edge_text,
+            height=1200  # Increased height
         )
     )
     return fig, node_order, pos
@@ -281,17 +283,12 @@ def read_ownership_excel(filepath):
 
 def create_visualization_subgraph(G):
     try:
-        # Try dot layout first
-        pos = nx.nx_agraph.graphviz_layout(G, prog='dot', args='-Grankdir=TB -Gnodesep=3.5 -Granksep=4.5')
+        # Try vertical tree layout first
+        pos = vertical_tree_layout(G, level_gap=8.0)
     except Exception as e:
-        print(f"Dot layout failed: {e}")
-        try:
-            # Try vertical tree layout
-            pos = vertical_tree_layout(G, level_gap=4.0)
-        except Exception as e:
-            print(f"Vertical tree layout failed: {e}")
-            # Fallback to spring layout
-            pos = nx.spring_layout(G, k=10, iterations=300)
+        print(f"Vertical tree layout failed: {e}")
+        # Fallback to spring layout
+        pos = nx.spring_layout(G, k=20, iterations=300)
     
     # Ensure all nodes have positions
     missing_nodes = set(G.nodes()) - set(pos.keys())
@@ -390,18 +387,24 @@ def main():
         else:
             st.error(f"File '{excel_path}' not found.")
             return
+
         # Only show descendants of selected root (ACG or AGG)
         roots = [n for n in ['ACG', 'AGG'] if n in G.nodes]
         if not roots:
             st.error("No ACG or AGG node found in the graph.")
             return
-        selected_root = st.selectbox("Pilih root perusahaan (ACG/AGG):", roots)
+        selected_root = st.selectbox("", roots, label_visibility="collapsed")
+        
         # Get all descendants (subtree) of the selected root
         tree_nodes = nx.descendants(G, selected_root) | {selected_root}
         Gtree = G.subgraph(tree_nodes).copy()
-        st.info(f"Menampilkan struktur dari: {selected_root}")
+
+        # Display the main graph at the top with click events
+        # st.markdown("### Struktur Organisasi")
         fig, node_order, pos = create_visualization(Gtree, force_hierarchical=True)
-        selected_points = plotly_events(fig, click_event=True, select_event=False, override_height=800, override_width='100%')
+        selected_points = plotly_events(fig, click_event=True, select_event=False, override_height=1200, override_width='100%')
+        
+        # Handle clicked node
         node_clicked = None
         if selected_points:
             label = selected_points[0].get('customdata') or selected_points[0].get('text')
@@ -417,64 +420,60 @@ def main():
                 node_clicked = label
             else:
                 st.warning(f"Clicked node label '{label}' not found in graph nodes.")
-        show_node = node_clicked if node_clicked else None
-        if show_node:
+
+        # Add dropdown for all nodes below the main graph
+
+        st.markdown("---")
+        st.markdown('<div style="text-align:center; font-size:1.2em; font-weight:bold; margin-bottom:0.5em;">Pilih Perusahaan</div>', unsafe_allow_html=True)
+        all_nodes = sorted(list(Gtree.nodes()))
+        selected_node = st.selectbox("", all_nodes, index=all_nodes.index(node_clicked) if node_clicked else 0, label_visibility="collapsed")
+        
+        # Display selected node info (no headings)
+        if selected_node:
             try:
-                details = {}
-                # Try to get details from Gtree first
-                if show_node in Gtree.nodes:
-                    details = Gtree.nodes[show_node]
-                # Then try G if not found
-                elif show_node in G.nodes:
-                    details = G.nodes[show_node]
-                # Finally try subG if it exists
-                elif 'subG' in locals() and show_node in subG.nodes:
-                    details = subG.nodes[show_node]
-                
-                st.markdown("---")
-                st.markdown(f"### Informasi {show_node}")
-                # Use get() with fallback values for all attributes
-                st.markdown(f"**Nama Lengkap:** {details.get('name', show_node)}")
+                details = Gtree.nodes[selected_node]
+                st.markdown(f"**Nama Lengkap:** {details.get('name', selected_node)}")
                 st.markdown(f"**Direktur Utama:** {details.get('direktur_utama', '-')}")
                 st.markdown(f"**Direktur:** {details.get('direktur', '-')}")
                 st.markdown(f"**Komisaris Utama:** {details.get('komisaris_utama', '-')}")
                 st.markdown(f"**Komisaris:** {details.get('komisaris', '-')}")
                 st.markdown(f"**Modal:** {details.get('modal', '-')}")
+                
+                # Show direct ownership structure
+                direct_owners = []
+                direct_subsidiaries = []
+                for u, v, d in Gtree.edges(data=True):
+                    if v == selected_node:
+                        direct_owners.append((u, v, d))
+                    if u == selected_node:
+                        direct_subsidiaries.append((u, v, d))
+                
+                if direct_owners or direct_subsidiaries:
+                    subG = nx.DiGraph()
+                    # First, add all nodes with their attributes
+                    for u, v, d in direct_owners + direct_subsidiaries:
+                        for node in [u, v]:
+                            if node not in subG.nodes:
+                                # Get attributes from Gtree, with fallback to G if not found
+                                attrs = Gtree.nodes.get(node, {})
+                                if not attrs and node in G.nodes:
+                                    attrs = G.nodes[node]
+                                # Ensure name attribute exists
+                                if 'name' not in attrs:
+                                    attrs['name'] = node
+                                subG.add_node(node, **attrs)
+                    # Then add all edges
+                    for u, v, d in direct_owners + direct_subsidiaries:
+                        subG.add_edge(u, v, **d)
+                    
+                    try:
+                        fig2, _, _ = create_visualization_subgraph(subG)
+                        st.plotly_chart(fig2, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Terjadi kesalahan saat menampilkan subgraph: {e}")
             except Exception as e:
                 st.warning(f"Terjadi kesalahan saat menampilkan info node: {e}")
-            # Show clear ownership table: 2 rows, owner and subsidiary
-            direct_owners = []
-            direct_subsidiaries = []
-            for u, v, d in Gtree.edges(data=True):
-                if v == show_node:
-                    direct_owners.append((u, v, d))
-                if u == show_node:
-                    direct_subsidiaries.append((u, v, d))
-            # Draw a second graph for direct ownership structure
-            if direct_owners or direct_subsidiaries:
-                subG = nx.DiGraph()
-                # First, add all nodes with their attributes
-                for u, v, d in direct_owners + direct_subsidiaries:
-                    for node in [u, v]:
-                        if node not in subG.nodes:
-                            # Get attributes from Gtree, with fallback to G if not found
-                            attrs = Gtree.nodes.get(node, {})
-                            if not attrs and node in G.nodes:
-                                attrs = G.nodes[node]
-                            # Ensure name attribute exists
-                            if 'name' not in attrs:
-                                attrs['name'] = node
-                            subG.add_node(node, **attrs)
-                # Then add all edges
-                for u, v, d in direct_owners + direct_subsidiaries:
-                    subG.add_edge(u, v, **d)
-                print(f"Subgraph nodes: {list(subG.nodes())}")
-                print(f"Subgraph edges: {list(subG.edges())}")
-                try:
-                    fig2, _, _ = create_visualization_subgraph(subG)
-                    st.plotly_chart(fig2, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"Terjadi kesalahan saat menampilkan subgraph: {e}")
+
     except Exception as e:
         st.markdown(f'<div style="font-size:12px; color:#f88; margin-top:4em;">Terjadi kesalahan: {str(e)}</div>', unsafe_allow_html=True)
 
