@@ -22,10 +22,11 @@ st.set_page_config(
 API_URL = "http://localhost:8000"  # Change this in production
 
 # Title and description
-st.title("Ayoda Capital Group - Struktur Organisasi")
-# st.markdown("""
-# Dashboard ini menampilkan struktur kepemilikan dari Ayoda Capital Group dan anak perusahaannya.
-# """)
+col1, col2 = st.columns([1, 5])
+with col1:
+    st.image("logo.png", width=80)
+with col2:
+    st.markdown("<h1 style='margin-top: 30px;'>Ayoda Capital Group - Struktur Organisasi</h1>", unsafe_allow_html=True)
 
 def fetch_companies() -> List[Dict]:
     """Fetch companies from the API"""
@@ -87,7 +88,7 @@ def create_visualization(G, force_hierarchical=False):
         if force_hierarchical:
             try:
                 # Try vertical tree layout first (doesn't require pygraphviz)
-                pos = vertical_tree_layout(G, level_gap=8.0)  # Increased vertical spacing
+                pos = vertical_tree_layout(G, level_gap=8.0)
             except Exception as e:
                 print(f"Vertical tree layout failed: {e}")
                 # Fallback to spring layout
@@ -151,15 +152,16 @@ def create_visualization(G, force_hierarchical=False):
     node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
     for node in node_order:
         if node not in pos:
-            print(f"Warning: Node '{node}' not in pos, skipping.")
+            print(f"Node {node} missing from pos!")
             continue
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
         parents = list(G.predecessors(node))
         children = list(G.successors(node))
-        parent_str = ', '.join(parents) if parents else '-'
-        child_str = ', '.join(children) if children else '-'
+        # Use names for hover text
+        parent_str = ', '.join([G.nodes[p].get('name', p) for p in parents]) if parents else '-'
+        child_str = ', '.join([G.nodes[c].get('name', c) for c in children]) if children else '-'
         name = G.nodes[node].get('name', node)
         hover_text = (
             f"<b style='color:white'>{name}</b><br>"
@@ -167,11 +169,12 @@ def create_visualization(G, force_hierarchical=False):
         )
         node_text.append(hover_text)
         node_labels.append(node)
+        # Node coloring and sizing logic
         if not parents:
-            node_colors.append('#1976D2')
+            node_colors.append('#1976D2')  # Blue
             node_sizes.append(50)
         else:
-            node_colors.append('#43A047')
+            node_colors.append('#43A047')  # Green
             node_sizes.append(35)
     node_trace = go.Scatter(
         x=node_x, y=node_y,
@@ -208,6 +211,8 @@ def create_visualization(G, force_hierarchical=False):
             height=1200  # Increased height
         )
     )
+    print("pos keys:", list(pos.keys()))
+    print("G nodes:", list(G.nodes()))
     return fig, node_order, pos
 
 def show_document_details(company_id: int):
@@ -297,6 +302,10 @@ def create_visualization_subgraph(G):
         y_min = min((y for x, y in pos.values()), default=0)
         for i, node in enumerate(missing_nodes):
             pos[node] = (i * 10, y_min - 20)
+
+    # **Fix: define node_order**
+    node_order = list(G.nodes())
+
     edge_x, edge_y, edge_text = [], [], []
     for edge in G.edges():
         x0, y0 = pos[edge[0]]
@@ -317,31 +326,19 @@ def create_visualization_subgraph(G):
         hoverinfo='none',
         mode='lines'
     )
-    node_order = list(G.nodes())
     node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
     for node in node_order:
         if node not in pos:
+            print(f"Node {node} missing from pos!")
             continue
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
-        parents = list(G.predecessors(node))
-        children = list(G.successors(node))
-        parent_str = ', '.join(parents) if parents else '-'
-        child_str = ', '.join(children) if children else '-'
         name = G.nodes[node].get('name', node)
-        hover_text = (
-            f"<b style='color:white'>{name}</b><br>"
-            f"<span style='color:white'>Induk: {parent_str}<br>Anak Perusahaan: {child_str}</span>"
-        )
-        node_text.append(hover_text)
-        node_labels.append(node)
-        if not parents:
-            node_colors.append('#1976D2')
-            node_sizes.append(50)
-        else:
-            node_colors.append('#43A047')
-            node_sizes.append(35)
+        node_text.append(name)
+        node_labels.append(name)
+        node_colors.append('#43A047')  # Green
+        node_sizes.append(40)          # 40
     node_trace = go.Scatter(
         x=node_x, y=node_y,
         mode='markers+text',
@@ -375,6 +372,8 @@ def create_visualization_subgraph(G):
             annotations=edge_text
         )
     )
+    print("Subgraph nodes:", list(G.nodes()))
+    print("Positions:", pos)
     return fig, node_order, pos
 
 def main():
@@ -477,4 +476,4 @@ def main():
         st.markdown(f'<div style="font-size:12px; color:#f88; margin-top:4em;">Terjadi kesalahan: {str(e)}</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    main() 
+    main()
