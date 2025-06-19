@@ -28,6 +28,15 @@ with col1:
 with col2:
     st.markdown("<h1 style='margin-top: 30px;'>Ayoda Capital Group - Struktur Organisasi</h1>", unsafe_allow_html=True)
 
+st.markdown("""
+    <style>
+        section[data-testid="stSidebar"] {
+            min-width: 140px;
+            max-width: 180px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 def fetch_companies() -> List[Dict]:
     """Fetch companies from the API"""
     response = requests.get(f"{API_URL}/companies/")
@@ -87,14 +96,11 @@ def create_visualization(G, force_hierarchical=False):
     try:
         if force_hierarchical:
             try:
-                # Try vertical tree layout first (doesn't require pygraphviz)
                 pos = vertical_tree_layout(G, level_gap=8.0)
             except Exception as e:
                 print(f"Vertical tree layout failed: {e}")
-                # Fallback to spring layout
                 pos = nx.spring_layout(G, k=20, iterations=300)
         else:
-            # Compute layout for each weakly connected component
             pos = {}
             for component in nx.weakly_connected_components(G):
                 subgraph = G.subgraph(component)
@@ -107,15 +113,12 @@ def create_visualization(G, force_hierarchical=False):
         print(f"Layout failed: {e}")
         pos = nx.spring_layout(G, k=20, iterations=300)
 
-    # Assign default positions to any node missing from pos
     missing_nodes = set(G.nodes()) - set(pos.keys())
     if missing_nodes:
         print(f"Missing nodes in pos: {missing_nodes}")
         y_min = min((y for x, y in pos.values()), default=0)
         for i, node in enumerate(missing_nodes):
             pos[node] = (i * 10, y_min - 20)
-    print(f"Nodes in G: {list(G.nodes())}")
-    print(f"Nodes in pos: {list(pos.keys())}")
     y_to_nodes = defaultdict(list)
     for node, (x, y) in pos.items():
         y_to_nodes[y].append((x, node))
@@ -152,36 +155,32 @@ def create_visualization(G, force_hierarchical=False):
     node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
     for node in node_order:
         if node not in pos:
-            print(f"Node {node} missing from pos!")
             continue
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
+        # Abbreviation for label
+        name = G.nodes[node].get('name', node)
+        abbr = abbreviate_company(name)
+        node_labels.append(abbr)
+        # Full name for hover
         parents = list(G.predecessors(node))
         children = list(G.successors(node))
-        # Use names for hover text
         parent_str = ', '.join([G.nodes[p].get('name', p) for p in parents]) if parents else '-'
         child_str = ', '.join([G.nodes[c].get('name', c) for c in children]) if children else '-'
-        name = G.nodes[node].get('name', node)
         hover_text = (
             f"<b style='color:white'>{name}</b><br>"
             f"<span style='color:white'>Induk: {parent_str}<br>Anak Perusahaan: {child_str}</span>"
         )
         node_text.append(hover_text)
-        node_labels.append(node)
-        # Node coloring and sizing logic
-        if not parents:
-            node_colors.append('#1976D2')  # Blue
-            node_sizes.append(50)
-        else:
-            node_colors.append('#43A047')  # Green
-            node_sizes.append(35)
+        node_colors.append('#1976D2')  # Blue for all nodes
+        node_sizes.append(40)
     node_trace = go.Scatter(
         x=node_x, y=node_y,
         mode='markers+text',
         hoverinfo='text',
         text=node_labels,
-        customdata=node_labels,
+        customdata=node_labels,  # This is crucial for click events
         textfont=dict(color='white', size=12, family='Arial'),
         textposition="bottom center",
         marker=dict(
@@ -191,10 +190,10 @@ def create_visualization(G, force_hierarchical=False):
             line=dict(width=6, color='#FFFFFF'),
             opacity=0.95,
             symbol='circle'
-        )
+        ),
+        hovertext=node_text,  # This ensures the hover text is used
+        hovertemplate='%{hovertext}<extra></extra>'  # This helps with click detection
     )
-    node_trace.text = node_labels
-    node_trace.hovertext = node_text
     fig = go.Figure(
         data=[edge_trace, node_trace],
         layout=go.Layout(
@@ -211,8 +210,6 @@ def create_visualization(G, force_hierarchical=False):
             height=1200  # Increased height
         )
     )
-    print("pos keys:", list(pos.keys()))
-    print("G nodes:", list(G.nodes()))
     return fig, node_order, pos
 
 def show_document_details(company_id: int):
@@ -286,59 +283,101 @@ def read_ownership_excel(filepath):
     print(f"All edges: {list(G.edges())}")
     return G, master_nodes
 
-def create_visualization_subgraph(G):
-    try:
-        # Try vertical tree layout first
-        pos = vertical_tree_layout(G, level_gap=8.0)
-    except Exception as e:
-        print(f"Vertical tree layout failed: {e}")
-        # Fallback to spring layout
-        pos = nx.spring_layout(G, k=20, iterations=300)
+def get_subgraph_for_company(G, selected_company):
+    # Get all parents of the selected company
+    parents = set()
+    for parent in G.predecessors(selected_company):
+        parents.add(parent)
     
+    # Get all subsidiaries of those parents (siblings + selected company)
+    all_siblings = set()
+    for parent in parents:
+        for subsidiary in G.successors(parent):
+            all_siblings.add(subsidiary)
+    
+    # Get ONLY DIRECT subsidiaries of the selected company (no grandchildren)
+    direct_subsidiaries = set()
+    for subsidiary in G.successors(selected_company):
+        direct_subsidiaries.add(subsidiary)
+    
+    # Combine all nodes
+    all_nodes = parents.union(all_siblings).union(direct_subsidiaries)
+    
+    # If no parents (root node like ACG), just show the node and its direct subsidiaries
+    if not parents:
+        all_nodes = {selected_company}.union(direct_subsidiaries)
+    
+    return G.subgraph(all_nodes)
+
+def create_visualization_subgraph(G, selected_node, pos=None):
+    subG = G.copy()
+    if pos is None:
+        try:
+            pos = vertical_subgraph_layout(subG, selected_node)
+        except Exception as e:
+            print(f"Vertical subgraph layout failed: {e}")
+            pos = nx.spring_layout(subG, k=20, iterations=300)
+
     # Ensure all nodes have positions
-    missing_nodes = set(G.nodes()) - set(pos.keys())
+    missing_nodes = set(subG.nodes()) - set(pos.keys())
     if missing_nodes:
-        print(f"Missing nodes in pos: {missing_nodes}")
         y_min = min((y for x, y in pos.values()), default=0)
         for i, node in enumerate(missing_nodes):
             pos[node] = (i * 10, y_min - 20)
 
-    # **Fix: define node_order**
-    node_order = list(G.nodes())
-
     edge_x, edge_y, edge_text = [], [], []
-    for edge in G.edges():
+    seen_edges = set()
+    for edge in subG.edges():
+        if edge in seen_edges:
+            continue
+        seen_edges.add(edge)
         x0, y0 = pos[edge[0]]
         x1, y1 = pos[edge[1]]
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
-        perc = G.edges[edge].get('percentage', None)
+        perc = subG.edges[edge].get('percentage', None)
         if perc is not None:
             try:
                 perc_int = int(round(float(perc)))
             except Exception:
                 perc_int = perc
             mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-            edge_text.append(dict(x=mx, y=my, text=f"<b>{perc_int}%</b>", showarrow=False, font=dict(color='red', size=18), align='center'))
+            # Only add annotation if not already present at this location
+            if not any(abs(mx - ann['x']) < 1e-6 and abs(my - ann['y']) < 1e-6 for ann in edge_text):
+                edge_text.append(dict(x=mx, y=my, text=f"<b>{perc_int}%</b>", showarrow=False, font=dict(color='red', size=18), align='center'))
+
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
         line=dict(width=3, color='#B0B0B0'),
         hoverinfo='none',
         mode='lines'
     )
-    node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
+
+    node_order = list(subG.nodes())
+    node_x, node_y, node_text, node_colors, node_sizes, node_labels, node_hovertext = [], [], [], [], [], [], []
     for node in node_order:
         if node not in pos:
-            print(f"Node {node} missing from pos!")
             continue
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
-        name = G.nodes[node].get('name', node)
-        node_text.append(name)
-        node_labels.append(name)
-        node_colors.append('#43A047')  # Green
-        node_sizes.append(40)          # 40
+        name = subG.nodes[node].get('name', node)  # Use subG instead of G
+        abbr = abbreviate_company(name)
+        node_labels.append(abbr)         # Abbreviation for label
+        node_hovertext.append(name)      # Full name for hover
+        if node == selected_node:
+            node_colors.append('#FFC107')  # Yellow for selected
+            node_sizes.append(50)
+        elif selected_node in subG.nodes and node in list(subG.predecessors(selected_node)):  # Use subG
+            node_colors.append('#1976D2')  # Blue for parent
+            node_sizes.append(40)
+        elif selected_node in subG.nodes and node in list(subG.successors(selected_node)):  # Use subG
+            node_colors.append('#43A047')  # Green for subsidiary
+            node_sizes.append(40)
+        else:
+            node_colors.append('#B0B0B0')  # Gray for others (if any)
+            node_sizes.append(30)
+
     node_trace = go.Scatter(
         x=node_x, y=node_y,
         mode='markers+text',
@@ -354,10 +393,11 @@ def create_visualization_subgraph(G):
             line=dict(width=6, color='#FFFFFF'),
             opacity=0.95,
             symbol='circle'
-        )
+        ),
+        hovertext=node_hovertext,  # <-- This ensures full name on hover
+        hovertemplate='%{hovertext}<extra></extra>'  # This helps with click detection
     )
-    node_trace.text = node_labels
-    node_trace.hovertext = node_text
+
     fig = go.Figure(
         data=[edge_trace, node_trace],
         layout=go.Layout(
@@ -372,105 +412,261 @@ def create_visualization_subgraph(G):
             annotations=edge_text
         )
     )
-    print("Subgraph nodes:", list(G.nodes()))
-    print("Positions:", pos)
     return fig, node_order, pos
 
+def vertical_subgraph_layout(G, selected_node):
+    pos = {}
+    
+    # Parents at the top (y=2)
+    parents = list(G.predecessors(selected_node))
+    n_parents = len(parents)
+    for i, parent in enumerate(parents):
+        pos[parent] = (i - (n_parents-1)/2, 2)
+    
+    # Selected node and siblings at the middle level (y=1)
+    siblings = set()
+    for parent in parents:
+        siblings.update(G.successors(parent))
+    siblings.discard(selected_node)
+    
+    # Put selected node and siblings at the same level
+    all_middle_nodes = [selected_node] + list(siblings)
+    n_middle = len(all_middle_nodes)
+    
+    # Sort nodes alphabetically for consistent positioning
+    all_middle_nodes.sort()
+    
+    # Find the position of selected node after sorting
+    selected_idx = all_middle_nodes.index(selected_node)
+    
+    # If we have odd number of nodes, try to center the selected node
+    if n_middle % 2 == 1:
+        center_idx = n_middle // 2
+        # If selected node is not in center, try to reorder
+        if selected_idx != center_idx:
+            # Create a new order with selected node in center
+            reordered = []
+            for i, node in enumerate(all_middle_nodes):
+                if node == selected_node:
+                    continue
+                reordered.append(node)
+            
+            # Insert selected node in center
+            reordered.insert(center_idx, selected_node)
+            all_middle_nodes = reordered
+    
+    for i, node in enumerate(all_middle_nodes):
+        pos[node] = (i - (n_middle-1)/2, 1)
+    
+    # Direct subsidiaries at the bottom (y=0)
+    subsidiaries = set(G.successors(selected_node))
+    bottom_nodes = list(subsidiaries)
+    bottom_nodes.sort()  # Sort for consistency
+    n_bottom = len(bottom_nodes)
+    for i, node in enumerate(bottom_nodes):
+        pos[node] = (i - (n_bottom-1)/2, 0)
+    
+    return pos
+
 def main():
+    import datetime
+    print(f"MAIN RUN at {datetime.datetime.now()}")
+    print("Session state at start:", dict(st.session_state))
     try:
+        # Initialize session state for view mode
+        if 'view_mode' not in st.session_state:
+            st.session_state.view_mode = "Pilih Perusahaan"
+        
+        # Sidebar toggle
+        view_mode = st.sidebar.radio(
+            "Tampilan",
+            ("Pilih Perusahaan", "Master Graph"),
+            index=0 if st.session_state.view_mode == "Pilih Perusahaan" else 1
+        )
+        
+        # Update session state when view mode changes
+        if view_mode != st.session_state.view_mode:
+            st.session_state.view_mode = view_mode
+            # Reset selected node to ACG when switching to Pilih Perusahaan
+            if view_mode == "Pilih Perusahaan":
+                st.session_state.selected_node = "ACG"
+            st.rerun()
+            st.stop()
+
+        # Build graph for selected root (ACG by default)
+        if 'selected_root' not in st.session_state:
+            st.session_state.selected_root = "ACG"
+        if 'selected_node' not in st.session_state:
+            st.session_state.selected_node = "ACG"
+
         excel_path = 'corporate_structure_analysis_v2.xlsx'
         if os.path.exists(excel_path):
             G, _ = read_ownership_excel(excel_path)
             if G is None:
-                return
+                st.stop()
         else:
             st.error(f"File '{excel_path}' not found.")
-            return
+            st.stop()
 
-        # Only show descendants of selected root (ACG or AGG)
-        roots = [n for n in ['ACG', 'AGG'] if n in G.nodes]
-        if not roots:
-            st.error("No ACG or AGG node found in the graph.")
-            return
-        selected_root = st.selectbox("", roots, label_visibility="collapsed")
-        
-        # Get all descendants (subtree) of the selected root
-        tree_nodes = nx.descendants(G, selected_root) | {selected_root}
+        tree_nodes = nx.descendants(G, st.session_state.selected_root) | {st.session_state.selected_root}
         Gtree = G.subgraph(tree_nodes).copy()
-
-        # Display the main graph at the top with click events
-        # st.markdown("### Struktur Organisasi")
-        fig, node_order, pos = create_visualization(Gtree, force_hierarchical=True)
-        selected_points = plotly_events(fig, click_event=True, select_event=False, override_height=1200, override_width='100%')
-        
-        # Handle clicked node
-        node_clicked = None
-        if selected_points:
-            label = selected_points[0].get('customdata') or selected_points[0].get('text')
-            if not label:
-                # Fallback: try to match by x/y position if label is None
-                x = selected_points[0].get('x')
-                y = selected_points[0].get('y')
-                for node, (x_pos, y_pos) in pos.items():
-                    if abs(x_pos - x) < 1e-6 and abs(y_pos - y) < 1e-6:
-                        label = node
-                        break
-            if label and label in Gtree.nodes:
-                node_clicked = label
-            else:
-                st.warning(f"Clicked node label '{label}' not found in graph nodes.")
-
-        # Add dropdown for all nodes below the main graph
-
-        st.markdown("---")
-        st.markdown('<div style="text-align:center; font-size:1.2em; font-weight:bold; margin-bottom:0.5em;">Pilih Perusahaan</div>', unsafe_allow_html=True)
-        # Build mapping from abbreviation to full name for dropdown
         abbr_to_full = {node: Gtree.nodes[node].get('name', node) for node in Gtree.nodes}
         full_to_abbr = {v: k for k, v in abbr_to_full.items()}
         all_full_names = [abbr_to_full[node] for node in sorted(Gtree.nodes())]
-        # Determine default selection (full name) based on node_clicked (abbr)
-        default_full_name = abbr_to_full[node_clicked] if node_clicked else all_full_names[0]
-        selected_full_name = st.selectbox("", all_full_names, index=all_full_names.index(default_full_name), label_visibility="collapsed")
-        selected_node = full_to_abbr[selected_full_name]
-        # Display selected node info (no headings)
-        if selected_node:
+
+        if st.session_state.view_mode == "Pilih Perusahaan":
+            # Company dropdown
+            selected_full_name = abbr_to_full[st.session_state.selected_node]
+            new_full_name = st.selectbox(
+                "Pilih Perusahaan",
+                all_full_names,
+                index=all_full_names.index(selected_full_name)
+            )
+            if new_full_name != selected_full_name:
+                st.session_state.selected_node = full_to_abbr[new_full_name]
+                st.rerun()
+                st.stop()
+            selected_node = full_to_abbr[selected_full_name]
+
+            # Info card
+            details = Gtree.nodes[selected_node]
+            st.markdown(f"""
+            <div style='background:#232339;padding:1.5em 1em 1em 1em;border-radius:12px;margin-bottom:1em;box-shadow:0 2px 8px #0002;'>
+                <b>Nama:</b> {details.get('name', selected_node)}<br>
+                <b>Direktur:</b> {details.get('direktur', '-') }<br>
+                <b>Komisaris:</b> {details.get('komisaris', '-') }<br>
+                <b>Modal:</b> {details.get('modal', '-') }
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Legend
+            st.markdown("""
+            <div style='background:#232339;padding:1em;border-radius:8px;margin-bottom:1em;box-shadow:0 2px 8px #0002;'>
+                <div style='display:flex;justify-content:center;gap:2em;flex-wrap:wrap;'>
+                    <div style='display:flex;align-items:center;gap:0.5em;'>
+                        <div style='width:20px;height:20px;background:#FFC107;border-radius:50%;'></div>
+                        <span>Perusahaan Terpilih</span>
+                    </div>
+                    <div style='display:flex;align-items:center;gap:0.5em;'>
+                        <div style='width:20px;height:20px;background:#1976D2;border-radius:50%;'></div>
+                        <span>Perusahaan Induk</span>
+                    </div>
+                    <div style='display:flex;align-items:center;gap:0.5em;'>
+                        <div style='width:20px;height:20px;background:#43A047;border-radius:50%;'></div>
+                        <span>Anak Perusahaan</span>
+                    </div>
+                    <div style='display:flex;align-items:center;gap:0.5em;'>
+                        <div style='width:20px;height:20px;background:#B0B0B0;border-radius:50%;'></div>
+                        <span>Perusahaan Saudara</span>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Subgraph with vertical, centered layout
+            subG = get_subgraph_for_company(Gtree, selected_node)
             try:
-                details = Gtree.nodes[selected_node]
-                st.markdown(f"**Nama Lengkap:** {details.get('name', selected_node)}")
-                st.markdown(f"**Direktur Utama:** {details.get('direktur_utama', '-')}")
-                st.markdown(f"**Direktur:** {details.get('direktur', '-')}")
-                st.markdown(f"**Komisaris Utama:** {details.get('komisaris_utama', '-')}")
-                st.markdown(f"**Komisaris:** {details.get('komisaris', '-')}")
-                st.markdown(f"**Modal:** {details.get('modal', '-')}")
-                # Show direct ownership structure
-                direct_owners = []
-                direct_subsidiaries = []
-                for u, v, d in Gtree.edges(data=True):
-                    if v == selected_node:
-                        direct_owners.append((u, v, d))
-                    if u == selected_node:
-                        direct_subsidiaries.append((u, v, d))
-                if direct_owners or direct_subsidiaries:
-                    subG = nx.DiGraph()
-                    # First, add all nodes with their attributes
-                    for u, v, d in direct_owners + direct_subsidiaries:
-                        for node in [u, v]:
-                            if node not in subG.nodes:
-                                attrs = Gtree.nodes.get(node, {})
-                                if not attrs and node in G.nodes:
-                                    attrs = G.nodes[node]
-                                if 'name' not in attrs:
-                                    attrs['name'] = node
-                                subG.add_node(node, **attrs)
-                    for u, v, d in direct_owners + direct_subsidiaries:
-                        subG.add_edge(u, v, **d)
-                    try:
-                        fig2, _, _ = create_visualization_subgraph(subG)
-                        st.plotly_chart(fig2, use_container_width=True)
-                    except Exception as e:
-                        st.warning(f"Terjadi kesalahan saat menampilkan subgraph: {e}")
+                pos = vertical_subgraph_layout(subG, selected_node)
             except Exception as e:
-                st.warning(f"Terjadi kesalahan saat menampilkan info node: {e}")
+                print(f"Vertical subgraph layout failed: {e}")
+                pos = nx.spring_layout(subG, k=20, iterations=300)
+            fig2, node_order2, _ = create_visualization_subgraph(subG, selected_node, pos=pos)
+            
+            # Add click callback to the figure
+            fig2.update_layout(
+                clickmode='event+select',
+                dragmode=False
+            )
+            
+            # Use plotly_events for node clicks
+            selected_points2 = plotly_events(
+                fig2, 
+                click_event=True, 
+                select_event=False, 
+                override_height=600, 
+                override_width='100%', 
+                key=f"subgraph_{selected_node}"
+            )
+            
+            if selected_points2:
+                print(f"Subgraph clicked: {selected_points2}")
+                point_data = selected_points2[0]
+                print(f"Point data keys: {point_data.keys()}")
+                print(f"Full point data: {point_data}")
+                
+                # Try different ways to get the label
+                label2 = None
+                if 'customdata' in point_data and point_data['customdata']:
+                    label2 = point_data['customdata']
+                elif 'text' in point_data and point_data['text']:
+                    label2 = point_data['text']
+                elif 'pointIndex' in point_data:
+                    idx = point_data['pointIndex']
+                    if idx < len(node_order2):
+                        label2 = node_order2[idx]
+                
+                print(f"Extracted label: {label2}")
+                print(f"Available nodes: {list(Gtree.nodes())}")
+                
+                if label2 and label2 in Gtree.nodes:
+                    print(f"Setting selected node to: {label2}")
+                    st.session_state.selected_node = label2
+                    st.rerun()
+                    st.stop()
+                else:
+                    print(f"Label {label2} not found in nodes")
+
+        elif st.session_state.view_mode == "Master Graph":
+            st.markdown("<h4 style='text-align:center;'>Struktur Lengkap (Master Graph)</h4>", unsafe_allow_html=True)
+            fig, node_order, pos = create_visualization(Gtree, force_hierarchical=True)
+            
+            # Add click callback to the figure
+            fig.update_layout(
+                clickmode='event+select',
+                dragmode=False
+            )
+            
+            # Use plotly_events for node clicks
+            selected_points = plotly_events(
+                fig, 
+                click_event=True, 
+                select_event=False, 
+                override_height=1200, 
+                override_width='100%', 
+                key="master_graph"
+            )
+            
+            if selected_points:
+                print(f"Master graph clicked: {selected_points}")
+                point_data = selected_points[0]
+                print(f"Point data keys: {point_data.keys()}")
+                print(f"Full point data: {point_data}")
+                
+                # Try different ways to get the label
+                label = None
+                if 'customdata' in point_data and point_data['customdata']:
+                    label = point_data['customdata']
+                elif 'text' in point_data and point_data['text']:
+                    label = point_data['text']
+                elif 'pointIndex' in point_data:
+                    idx = point_data['pointIndex']
+                    if idx < len(node_order):
+                        label = node_order[idx]
+                
+                print(f"Extracted label: {label}")
+                print(f"Available nodes: {list(Gtree.nodes())}")
+                
+                if label and label in Gtree.nodes:
+                    print(f"Switching to Pilih Perusahaan with node: {label}")
+                    st.session_state.view_mode = "Pilih Perusahaan"
+                    st.session_state.selected_node = label
+                    st.rerun()
+                    st.stop()
+                else:
+                    print(f"Label {label} not found in nodes")
+            
+            # Display the chart
+            st.plotly_chart(fig, use_container_width=True, height=1200, key="master_graph_chart")
 
     except Exception as e:
         st.markdown(f'<div style="font-size:12px; color:#f88; margin-top:4em;">Terjadi kesalahan: {str(e)}</div>', unsafe_allow_html=True)
