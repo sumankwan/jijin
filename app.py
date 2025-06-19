@@ -10,6 +10,7 @@ import os
 from streamlit_plotly_events import plotly_events
 import re
 from collections import Counter, defaultdict
+import numpy as np
 
 # Set page config
 st.set_page_config(
@@ -137,16 +138,20 @@ def create_visualization(G, force_hierarchical=False):
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
         perc = G.edges[edge].get('percentage', None)
-        if perc is not None:
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        if perc is not None and str(perc).strip() != "":
             try:
                 perc_int = int(round(float(perc)))
+                label = f"<b>{perc_int}%</b>"
             except Exception:
-                perc_int = perc
-            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-            edge_text.append(dict(x=mx, y=my, text=f"<b>{perc_int}%</b>", showarrow=False, font=dict(color='red', size=9), align='center'))
+                label = f"<b>{perc}</b>"
+        else:
+            label = "<b>?</b>"  # Or use '-' or 'N/A' if you prefer
+        if not any(abs(mx - ann['x']) < 1e-6 and abs(my - ann['y']) < 1e-6 for ann in edge_text):
+            edge_text.append(dict(x=mx, y=my, text=label, showarrow=False, font=dict(color='red', size=6), align='center'))  # Reduced to size=6 for master graph
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
-        line=dict(width=3, color='#B0B0B0'),
+        line=dict(width=1.5, color='#B0B0B0'),
         hoverinfo='none',
         mode='lines'
     )
@@ -210,6 +215,25 @@ def create_visualization(G, force_hierarchical=False):
             height=1200  # Increased height
         )
     )
+
+    # After creating edge_trace, add arrows for each edge
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        # Draw an arrow from parent (shareholder) to child (subsidiary)
+        fig.add_annotation(
+            x=x1, y=y1,
+            ax=x0, ay=y0,
+            xref='x', yref='y',
+            axref='x', ayref='y',
+            showarrow=True,
+            arrowhead=4,        # Medium, classic arrowhead
+            arrowsize=1.0,      # Reduced from 1.5 to 1.0
+            arrowwidth=1.5,     # Reduced from 2.5 to 1.5
+            arrowcolor='#1976D2',  # Blue color
+            opacity=1.0,        # Fully opaque
+            standoff=8          # Reduced from 10 to 8
+        )
     return fig, node_order, pos
 
 def show_document_details(company_id: int):
@@ -336,15 +360,18 @@ def create_visualization_subgraph(G, selected_node, pos=None):
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
         perc = subG.edges[edge].get('percentage', None)
-        if perc is not None:
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        if perc is not None and str(perc).strip() != "":
             try:
                 perc_int = int(round(float(perc)))
+                label = f"<b>{perc_int}%</b>"
             except Exception:
-                perc_int = perc
-            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-            # Only add annotation if not already present at this location
-            if not any(abs(mx - ann['x']) < 1e-6 and abs(my - ann['y']) < 1e-6 for ann in edge_text):
-                edge_text.append(dict(x=mx, y=my, text=f"<b>{perc_int}%</b>", showarrow=False, font=dict(color='red', size=18), align='center'))
+                label = f"<b>{perc}</b>"
+        else:
+            label = "<b>?</b>"  # Or use '-' or 'N/A' if you prefer
+        # Only add annotation if not already present at this location
+        if not any(abs(mx - ann['x']) < 1e-6 and abs(my - ann['y']) < 1e-6 for ann in edge_text):
+            edge_text.append(dict(x=mx, y=my, text=label, showarrow=False, font=dict(color='red', size=14), align='center'))
 
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
@@ -361,22 +388,24 @@ def create_visualization_subgraph(G, selected_node, pos=None):
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
-        name = subG.nodes[node].get('name', node)  # Use subG instead of G
+        name = subG.nodes[node].get('name', node)
         abbr = abbreviate_company(name)
-        node_labels.append(abbr)         # Abbreviation for label
-        node_hovertext.append(name)      # Full name for hover
+        node_labels.append(abbr)
+        node_hovertext.append(name)
+        
+        # Restore the color coding
         if node == selected_node:
             node_colors.append('#FFC107')  # Yellow for selected
             node_sizes.append(50)
-        elif selected_node in subG.nodes and node in list(subG.predecessors(selected_node)):  # Use subG
+        elif selected_node in subG.nodes and node in list(subG.predecessors(selected_node)):
             node_colors.append('#1976D2')  # Blue for parent
             node_sizes.append(40)
-        elif selected_node in subG.nodes and node in list(subG.successors(selected_node)):  # Use subG
+        elif selected_node in subG.nodes and node in list(subG.successors(selected_node)):
             node_colors.append('#43A047')  # Green for subsidiary
             node_sizes.append(40)
         else:
-            node_colors.append('#B0B0B0')  # Gray for others (if any)
-            node_sizes.append(30)
+            node_colors.append('#FFFFFF')  # White for other nodes (covering them)
+            node_sizes.append(35)
 
     node_trace = go.Scatter(
         x=node_x, y=node_y,
@@ -412,52 +441,53 @@ def create_visualization_subgraph(G, selected_node, pos=None):
             annotations=edge_text
         )
     )
+
+    # Add arrows for directionality
+    for edge in subG.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        fig.add_annotation(
+            x=x1, y=y1,
+            ax=x0, ay=y0,
+            xref='x', yref='y',
+            axref='x', ayref='y',
+            showarrow=True,
+            arrowhead=4,        # Medium, classic arrowhead
+            arrowsize=1.0,      # Reduced from 1.5 to 1.0
+            arrowwidth=1.5,     # Reduced from 2.5 to 1.5
+            arrowcolor='#1976D2',  # Blue color
+            opacity=1.0,        # Fully opaque
+            standoff=8          # Reduced from 10 to 8
+        )
     return fig, node_order, pos
 
 def vertical_subgraph_layout(G, selected_node):
     pos = {}
-    
+
     # Parents at the top (y=2)
     parents = list(G.predecessors(selected_node))
     n_parents = len(parents)
     for i, parent in enumerate(parents):
         pos[parent] = (i - (n_parents-1)/2, 2)
-    
-    # Selected node and siblings at the middle level (y=1)
+
+    # Siblings and selected node at the middle level (y=1)
     siblings = set()
     for parent in parents:
         siblings.update(G.successors(parent))
     siblings.discard(selected_node)
-    
-    # Put selected node and siblings at the same level
+
+    # --- Fixed positioning system ---
     all_middle_nodes = [selected_node] + list(siblings)
+    
+    # Create a fixed order based on alphabetical sorting of full names
+    # This ensures the same positions regardless of which node is selected
+    all_middle_nodes.sort(key=lambda x: G.nodes[x].get('name', x))
+    
+    # Position all nodes in their fixed alphabetical order
     n_middle = len(all_middle_nodes)
-    
-    # Sort nodes alphabetically for consistent positioning
-    all_middle_nodes.sort()
-    
-    # Find the position of selected node after sorting
-    selected_idx = all_middle_nodes.index(selected_node)
-    
-    # If we have odd number of nodes, try to center the selected node
-    if n_middle % 2 == 1:
-        center_idx = n_middle // 2
-        # If selected node is not in center, try to reorder
-        if selected_idx != center_idx:
-            # Create a new order with selected node in center
-            reordered = []
-            for i, node in enumerate(all_middle_nodes):
-                if node == selected_node:
-                    continue
-                reordered.append(node)
-            
-            # Insert selected node in center
-            reordered.insert(center_idx, selected_node)
-            all_middle_nodes = reordered
-    
     for i, node in enumerate(all_middle_nodes):
         pos[node] = (i - (n_middle-1)/2, 1)
-    
+
     # Direct subsidiaries at the bottom (y=0)
     subsidiaries = set(G.successors(selected_node))
     bottom_nodes = list(subsidiaries)
@@ -465,8 +495,152 @@ def vertical_subgraph_layout(G, selected_node):
     n_bottom = len(bottom_nodes)
     for i, node in enumerate(bottom_nodes):
         pos[node] = (i - (n_bottom-1)/2, 0)
-    
+
     return pos
+
+def create_highlighted_master_graph(G, selected_node, pos=None):
+    """Create master graph with highlighted subgraph nodes"""
+    if pos is None:
+        try:
+            # Use a much more spread out layout
+            pos = vertical_tree_layout(G, level_gap=20.0)  # Increased from 12.0 to 20.0
+        except Exception as e:
+            print(f"Vertical tree layout failed: {e}")
+            pos = nx.spring_layout(G, k=50, iterations=1000)  # Increased k and iterations for much better spacing
+
+    # Get subgraph nodes to highlight
+    subG = get_subgraph_for_company(G, selected_node)
+    subgraph_nodes = set(subG.nodes())
+
+    # Improve node spacing by spreading out nodes at the same level
+    y_to_nodes = defaultdict(list)
+    for node, (x, y) in pos.items():
+        y_to_nodes[y].append((x, node))
+    
+    # Spread out nodes at each level with much more spacing
+    for y, x_nodes in y_to_nodes.items():
+        x_nodes_sorted = sorted(x_nodes)
+        n = len(x_nodes_sorted)
+        if n > 1:
+            spread = max(30, n * 8)  # Increased spread significantly for better separation
+            for i, (orig_x, node) in enumerate(x_nodes_sorted):
+                new_x = -spread/2 + i * (spread/(n-1)) if n > 1 else 0
+                pos[node] = (new_x, y)
+
+    # Create the visualization with highlighted nodes
+    edge_x, edge_y, edge_text = [], [], []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        perc = G.edges[edge].get('percentage', None)
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        if perc is not None and str(perc).strip() != "":
+            try:
+                perc_int = int(round(float(perc)))
+                label = f"<b>{perc_int}%</b>"
+            except Exception:
+                label = f"<b>{perc}</b>"
+        else:
+            label = "<b>?</b>"
+        if not any(abs(mx - ann['x']) < 1e-6 and abs(my - ann['y']) < 1e-6 for ann in edge_text):
+            edge_text.append(dict(x=mx, y=my, text=label, showarrow=False, font=dict(color='red', size=6), align='center'))  # Reduced to size=6 for highlighted master graph
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1.5, color='#B0B0B0'),
+        hoverinfo='none',
+        mode='lines'
+    )
+
+    node_order = list(G.nodes())
+    node_x, node_y, node_text, node_colors, node_sizes, node_labels = [], [], [], [], [], []
+    for node in node_order:
+        if node not in pos:
+            continue
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        name = G.nodes[node].get('name', node)
+        abbr = abbreviate_company(name)
+        node_labels.append(abbr)
+        
+        parents = list(G.predecessors(node))
+        children = list(G.successors(node))
+        parent_str = ', '.join([G.nodes[p].get('name', p) for p in parents]) if parents else '-'
+        child_str = ', '.join([G.nodes[c].get('name', c) for c in children]) if children else '-'
+        hover_text = (
+            f"<b style='color:white'>{name}</b><br>"
+            f"<span style='color:white'>Induk: {parent_str}<br>Anak Perusahaan: {child_str}</span>"
+        )
+        node_text.append(hover_text)
+        
+        # Color coding: highlight subgraph nodes
+        if node == selected_node:
+            node_colors.append('#FFC107')  # Yellow for selected
+            node_sizes.append(45)  # Slightly smaller
+        elif node in subgraph_nodes:
+            node_colors.append('#FF5722')  # Orange for subgraph nodes
+            node_sizes.append(40)  # Slightly smaller
+        else:
+            node_colors.append('#FFFFFF')  # White for other nodes (covering them)
+            node_sizes.append(30)  # Smaller for background nodes
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        hoverinfo='text',
+        text=node_labels,
+        customdata=node_labels,
+        textfont=dict(color='white', size=10, family='Arial'),  # Smaller font
+        textposition="bottom center",
+        marker=dict(
+            showscale=False,
+            color=node_colors,
+            size=node_sizes,
+            line=dict(width=4, color='#FFFFFF'),  # Thinner border
+            opacity=0.95,
+            symbol='circle'
+        ),
+        hovertext=node_text,
+        hovertemplate='%{hovertext}<extra></extra>'
+    )
+
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            font=dict(color='white', size=16, family='Arial'),  # Smaller font
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=40, l=20, r=20, t=80),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            plot_bgcolor='#181825',
+            paper_bgcolor='#181825',
+            annotations=edge_text,
+            height=1600  # Increased height for much better spacing
+        )
+    )
+
+    # Add arrows
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        fig.add_annotation(
+            x=x1, y=y1,
+            ax=x0, ay=y0,
+            xref='x', yref='y',
+            axref='x', ayref='y',
+            showarrow=True,
+            arrowhead=4,
+            arrowsize=0.8,  # Smaller arrows
+            arrowwidth=1.2,  # Thinner arrows
+            arrowcolor='#1976D2',
+            opacity=1.0,
+            standoff=6  # Smaller standoff
+        )
+    return fig, node_order, pos
 
 def main():
     import datetime
@@ -476,6 +650,10 @@ def main():
         # Initialize session state for view mode
         if 'view_mode' not in st.session_state:
             st.session_state.view_mode = "Pilih Perusahaan"
+        if 'show_highlighted_master' not in st.session_state:
+            st.session_state.show_highlighted_master = False
+        if 'highlighted_node' not in st.session_state:
+            st.session_state.highlighted_node = None
         
         # Sidebar toggle
         view_mode = st.sidebar.radio(
@@ -588,6 +766,13 @@ def main():
                 key=f"subgraph_{selected_node}"
             )
             
+            # Button below subgraph
+            if st.button("Lihat di Master Graph", key=f"show_master_{selected_node}"):
+                st.session_state.show_highlighted_master = True
+                st.session_state.highlighted_node = selected_node
+                st.rerun()
+                st.stop()
+            
             if selected_points2:
                 print(f"Subgraph clicked: {selected_points2}")
                 point_data = selected_points2[0]
@@ -615,6 +800,17 @@ def main():
                     st.stop()
                 else:
                     print(f"Label {label2} not found in nodes")
+
+            # Display highlighted master graph if requested
+            if st.session_state.get('show_highlighted_master', False) and st.session_state.get('highlighted_node') == selected_node:
+                st.markdown("<h4 style='text-align:center;'>Posisi dalam Master Graph</h4>", unsafe_allow_html=True)
+                highlighted_fig, _, _ = create_highlighted_master_graph(Gtree, selected_node)
+                st.plotly_chart(highlighted_fig, use_container_width=True, height=1200, key="highlighted_master")
+                
+                if st.button("Kembali ke Subgraph", key="back_to_subgraph"):
+                    st.session_state.show_highlighted_master = False
+                    st.rerun()
+                    st.stop()
 
         elif st.session_state.view_mode == "Master Graph":
             st.markdown("<h4 style='text-align:center;'>Struktur Lengkap (Master Graph)</h4>", unsafe_allow_html=True)
