@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ayoda Capital Group - Struktur Organisasi</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #0e1117;
+            color: white;
+            overflow-x: auto;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            background: #0e1117;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin-right: 20px;
+            background: #1976D2;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .title {
+            margin-top: 30px;
+        }
+        
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 180px;
+            height: 100vh;
+            background: #262730;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 1000;
+        }
+        
+        .main-content {
+            margin-left: 180px;
+            padding: 10px 5px 20px 20px;
+            min-height: 100vh;
+            width: calc(100vw - 180px);
+            max-width: calc(100vw - 180px);
+            box-sizing: border-box;
+        }
+        
+        .view-toggle {
+            margin-bottom: 30px;
+        }
+        
+        .view-toggle input[type="radio"] {
+            margin-right: 8px;
+        }
+        
+        .view-toggle label {
+            display: block;
+            margin-bottom: 10px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .view-toggle label:hover {
+            background: #3d3d4d;
+        }
+        
+        .company-select {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #4a4a4a;
+            border-radius: 5px;
+            background: #262730;
+            color: white;
+            margin-bottom: 20px;
+        }
+        
+        .info-card {
+            background: #232339;
+            padding: 1.5em 1em 1em 1em;
+            border-radius: 12px;
+            margin-bottom: 1em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .legend {
+            background: #232339;
+            padding: 1em;
+            border-radius: 8px;
+            margin-bottom: 1em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .legend-content {
+            display: flex;
+            justify-content: center;
+            gap: 2em;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        
+        .chart-container {
+            width: 100%;
+            max-width: 100%;
+            height: 600px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            margin-left: 0;
+            margin-right: 0;
+        }
+        
+        .master-chart-container {
+            width: 100%;
+            max-width: 100%;
+            height: 1200px;
+            overflow-x: auto;
+            margin-left: 0;
+            margin-right: 0;
+        }
+        
+        #highlightedMaster {
+            width: 100%;
+            max-width: 100%;
+        }
+        
+        #highlightedChart {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .button {
+            background: #1976D2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        
+        .button:hover {
+            background: #1565C0;
+        }
+        
+        .center-title {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 140px;
+            }
+            .main-content {
+                margin-left: 140px;
+            }
+            .legend-content {
+                gap: 1em;
+            }
+            .chart-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="view-toggle">
+            <h3>Tampilan</h3>
+            <label>
+                <input type="radio" name="viewMode" value="company" checked onchange="switchView()">
+                Pilih Perusahaan
+            </label>
+            <label>
+                <input type="radio" name="viewMode" value="master" onchange="switchView()">
+                Master Graph
+            </label>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="logo">🏢</div>
+            <div class="title">
+                <h1>Ayoda Capital Group - Struktur Organisasi</h1>
+            </div>
+        </div>
+        
+        <div id="companyView">
+            <select id="companySelect" class="company-select" onchange="selectCompany()">
+                <option value="">Pilih Perusahaan</option>
+            </select>
+            
+            <div id="companyInfo" class="info-card" style="display: none;">
+                <div id="companyDetails"></div>
+            </div>
+            
+            <div class="legend">
+                <div class="legend-content">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #FFC107;"></div>
+                        <span>Perusahaan Terpilih</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #1976D2;"></div>
+                        <span>Perusahaan Induk</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #43A047;"></div>
+                        <span>Anak Perusahaan</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #B0B0B0;"></div>
+                        <span>Perusahaan Saudara</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="subgraphChart" class="chart-container"></div>
+            
+            <button id="showMasterBtn" class="button" onclick="showInMasterGraph()" style="display: none;">
+                Lihat di Master Graph
+            </button>
+            
+            <div id="highlightedMaster" style="display: none;">
+                <h4 class="center-title">Posisi dalam Master Graph</h4>
+                <div style="margin-bottom: 20px; text-align: center;">
+                    <label style="margin-right: 10px;">Pilih Tree:</label>
+                    <select id="highlightedRootSelect" class="company-select" style="width: 300px;" onchange="selectHighlightedRoot()">
+                        <option value="ACG">PT Ayoda Capital Group</option>
+                        <option value="AGG">PT Ayoda Global Group</option>
+                    </select>
+                </div>
+                <div id="highlightedChart" class="master-chart-container"></div>
+                <button class="button" onclick="backToSubgraph()">Kembali ke Subgraph</button>
+            </div>
+        </div>
+        
+        <div id="masterView" style="display: none;">
+            <h4 class="center-title">Struktur Lengkap (Master Graph)</h4>
+            <div style="margin-bottom: 20px; text-align: center;">
+                <label style="margin-right: 10px;">Pilih Root Company:</label>
+                <select id="rootSelect" class="company-select" style="width: 300px;" onchange="selectRoot()">
+                    <option value="ACG">PT Ayoda Capital Group</option>
+                    <option value="AGG">PT Ayoda Global Group</option>
+                </select>
+            </div>
+            <div id="masterChart" class="master-chart-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // Data from Python - ONLY connected tree nodes (no isolated companies)
+        const nodes = [
+  {
+    "id": "ANP",
+    "name": "PT Aneka Niaga Prima",
+    "abbr": "ANP"
+  },
+  {
+    "id": "KPS",
+    "name": "PT Konawe Panca Sulawesi",
+    "abbr": "KPS"
+  },
+  {
+    "id": "BGM",
+    "name": "PT Barisan Gunung Mas",
+    "abbr": "BGM"
+  },
+  {
+    "id": "DAN",
+    "name": "PT Data Awan Nusantara",
+    "abbr": "DAN"
+  },
+  {
+    "id": "BSJ",
+    "name": "PT Bumi Sentosa Jaya",
+    "abbr": "BSJ"
+  },
+  {
+    "id": "BPM",
+    "name": "PT Barta Putra Mulia",
+    "abbr": "BPM"
+  },
+  {
+    "id": "DDA",
+    "name": "PT Dua Delapan Ayoda",
+    "abbr": "DDA"
+  },
+  {
+    "id": "NSG",
+    "name": "PT Niscala Sukses Gemilang",
+    "abbr": "NSG"
+  },
+  {
+    "id": "ACG",
+    "name": "PT Ayoda Capital Group",
+    "abbr": "ACG"
+  },
+  {
+    "id": "BPSP",
+    "name": "PT Bumi Persada Surta Pratama",
+    "abbr": "BPSP"
+  },
+  {
+    "id": "TBSB",
+    "name": "PT Tirta Bumi Sejahtera Bali",
+    "abbr": "TBSB"
+  },
+  {
+    "id": "JPD",
+    "name": "PT Jakarta Properti Delapan",
+    "abbr": "JPD"
+  },
+  {
+    "id": "KSM",
+    "name": "PT Kanaka Sukses Makmur",
+    "abbr": "KSM"
+  },
+  {
+    "id": "SMM",
+    "name": "PT Sumber Mas Mineral",
+    "abbr": "SMM"
+  },
+  {
+    "id": "BIA",
+    "name": "PT Barisan Investama Ayoda",
+    "abbr": "BIA"
+  },
+  {
+    "id": "BSM",
+    "name": "PT Barisan Sekawan Mineral",
+    "abbr": "BSM"
+  },
+  {
+    "id": "INKP",
+    "name": "PT Indo Nikel Karya Pratama",
+    "abbr": "INKP"
+  },
+  {
+    "id": "BMM",
+    "name": "PT Bersama Menambang Mineral",
+    "abbr": "BMM"
+  },
+  {
+    "id": "AAA",
+    "name": "PT Artha Alfa Abadi",
+    "abbr": "AAA"
+  },
+  {
+    "id": "JACA",
+    "name": "PT Jaya Agung Cipta Anugerah",
+    "abbr": "JACA"
+  },
+  {
+    "id": "LLT",
+    "name": "PT Langgeng Lestari Terus",
+    "abbr": "LLT"
+  },
+  {
+    "id": "BIM",
+    "name": "PT Buana Investama Mandiri",
+    "abbr": "BIM"
+  },
+  {
+    "id": "KFM",
+    "name": "PT Koninis Fajar Mineral",
+    "abbr": "KFM"
+  },
+  {
+    "id": "ADA",
+    "name": "PT Ayoda Data Adiwangsa",
+    "abbr": "ADA"
+  },
+  {
+    "id": "PMI",
+    "name": "PT Pritama Morowali Indonesia",
+    "abbr": "PMI"
+  },
+  {
+    "id": "KAP",
+    "name": "PT Kelola Aset Properti",
+    "abbr": "KAP"
+  },
+  {
+    "id": "OIL",
+    "name": "OMAH International Ltd",
+    "abbr": "OIL"
+  },
+  {
+    "id": "KSK",
+    "name": "PT Karya Sarana Kita",
+    "abbr": "KSK"
+  },
+  {
+    "id": "RLP",
+    "name": "PT Rosahan Laju Prima",
+    "abbr": "RLP"
+  },
+  {
+    "id": "BMP",
+    "name": "PT Banggai Mandiri Pratama",
+    "abbr": "BMP"
+  },
+  {
+    "id": "AGR",
+    "name": "PT Ayoda Global Raya",
+    "abbr": "AGR"
+  },
+  {
+    "id": "BKI",
+    "name": "PT Barisan Karya Investama",
+    "abbr": "BKI"
+  },
+  {
+    "id": "ASI",
+    "name": "PT Ayoda Sukses Investama",
+    "abbr": "ASI"
+  },
+  {
+    "id": "DYI",
+    "name": "PT Dwi Yasa Investama",
+    "abbr": "DYI"
+  },
+  {
+    "id": "KGA",
+    "name": "PT Karya Graha Ayoda",
+    "abbr": "KGA"
+  },
+  {
+    "id": "KPI",
+    "name": "PT Konawe Panca Indonesia",
+    "abbr": "KPI"
+  },
+  {
+    "id": "SDN",
+    "name": "PT Sentral Data Nusantara",
+    "abbr": "SDN"
+  },
+  {
+    "id": "GAI",
+    "name": "PT Graha Ayoda Investama",
+    "abbr": "GAI"
+  },
+  {
+    "id": "DAS",
+    "name": "PT Duta Artha Sinergi",
+    "abbr": "DAS"
+  },
+  {
+    "id": "MMI",
+    "name": "PT Masline Mineral Investama",
+    "abbr": "MMI"
+  },
+  {
+    "id": "AGS",
+    "name": "PT Agrova Gani Sentosa",
+    "abbr": "AGS"
+  },
+  {
+    "id": "HKT",
+    "name": "PT Hara Kiara Tirtayasa",
+    "abbr": "HKT"
+  },
+  {
+    "id": "AGG",
+    "name": "PT Ayoda Global Group",
+    "abbr": "AGG"
+  },
+  {
+    "id": "DEV",
+    "name": "PT Dharma Elok Varia",
+    "abbr": "DEV"
+  },
+  {
+    "id": "MBS",
+    "name": "PT Mitra Berkarya Sejati",
+    "abbr": "MBS"
+  },
+  {
+    "id": "TTS",
+    "name": "PT Tierra Tirta Satya",
+    "abbr": "TTS"
+  },
+  {
+    "id": "NVA",
+    "name": "PT Nusa Ventura Anargya",
+    "abbr": "NVA"
+  },
+  {
+    "id": "KPM",
+    "name": "PT Konawe Panca Mineral",
+    "abbr": "KPM"
+  },
+  {
+    "id": "KTM",
+    "name": "PT Kita Tambang Mineral",
+    "abbr": "KTM"
+  },
+  {
+    "id": "KAA",
+    "name": "PT Karya Alam Abadi",
+    "abbr": "KAA"
+  },
+  {
+    "id": "KSI",
+    "name": "PT Kyara Sukses Investama",
+    "abbr": "KSI"
+  },
+  {
+    "id": "BKP",
+    "name": "PT Banggai Kencana Permai",
+    "abbr": "BKP"
+  },
+  {
+    "id": "KMM",
+    "name": "PT Kali Mas Mineral",
+    "abbr": "KMM"
+  },
+  {
+    "id": "PHP",
+    "name": "PT Pulau Hamparan Pudi",
+    "abbr": "PHP"
+  },
+  {
+    "id": "JAS",
+    "name": "PT Jaya Abadi Semesta",
+    "abbr": "JAS"
+  }
+];
+        const edges = [
+  {
+    "source": "BGM",
+    "target": "MMI",
+    "percentage": 50.0
+  },
+  {
+    "source": "BGM",
+    "target": "ANP",
+    "percentage": 18.0
+  },
+  {
+    "source": "DDA",
+    "target": "KMM",
+    "percentage": 30.0
+  },
+  {
+    "source": "DDA",
+    "target": "NSG",
+    "percentage": 20.0
+  },
+  {
+    "source": "DDA",
+    "target": "KFM",
+    "percentage": 75.0
+  },
+  {
+    "source": "DDA",
+    "target": "KSI",
+    "percentage": 50.0
+  },
+  {
+    "source": "DDA",
+    "target": "BSJ",
+    "percentage": 70.0
+  },
+  {
+    "source": "DDA",
+    "target": "JAS",
+    "percentage": 40.0
+  },
+  {
+    "source": "DDA",
+    "target": "KAA",
+    "percentage": 70.0
+  },
+  {
+    "source": "DDA",
+    "target": "MBS",
+    "percentage": 75.0
+  },
+  {
+    "source": "DDA",
+    "target": "PMI",
+    "percentage": 51.0
+  },
+  {
+    "source": "DDA",
+    "target": "SMM",
+    "percentage": 30.0
+  },
+  {
+    "source": "ACG",
+    "target": "BKI",
+    "percentage": 50.0
+  },
+  {
+    "source": "ACG",
+    "target": "DYI",
+    "percentage": 80.0
+  },
+  {
+    "source": "ACG",
+    "target": "BGM",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "BIM",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "BMM",
+    "percentage": 50.0
+  },
+  {
+    "source": "ACG",
+    "target": "ASI",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "AGR",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "BIA",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "GAI",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "PHP",
+    "percentage": 99.0
+  },
+  {
+    "source": "ACG",
+    "target": "AAA",
+    "percentage": 99.0
+  },
+  {
+    "source": "BPSP",
+    "target": "KPS",
+    "percentage": 51.0
+  },
+  {
+    "source": "BIA",
+    "target": "SDN",
+    "percentage": 70.0
+  },
+  {
+    "source": "BIA",
+    "target": "BSM",
+    "percentage": 50.0
+  },
+  {
+    "source": "BIA",
+    "target": "DDA",
+    "percentage": 50.0
+  },
+  {
+    "source": "BIA",
+    "target": "KSK",
+    "percentage": 50.0
+  },
+  {
+    "source": "BIA",
+    "target": "SMM",
+    "percentage": 70.0
+  },
+  {
+    "source": "BSM",
+    "target": "KMM",
+    "percentage": 70.0
+  },
+  {
+    "source": "BSM",
+    "target": "NSG",
+    "percentage": 80.0
+  },
+  {
+    "source": "AAA",
+    "target": "BKP",
+    "percentage": 17.0
+  },
+  {
+    "source": "AAA",
+    "target": "BMP",
+    "percentage": 17.0
+  },
+  {
+    "source": "AAA",
+    "target": "BPSP",
+    "percentage": 17.5
+  },
+  {
+    "source": "AAA",
+    "target": "INKP",
+    "percentage": 17.0
+  },
+  {
+    "source": "AAA",
+    "target": "KPI",
+    "percentage": 17.5
+  },
+  {
+    "source": "AAA",
+    "target": "KPS",
+    "percentage": 8.6
+  },
+  {
+    "source": "BIM",
+    "target": "JACA",
+    "percentage": 99.0
+  },
+  {
+    "source": "BIM",
+    "target": "DEV",
+    "percentage": 50.0
+  },
+  {
+    "source": "BIM",
+    "target": "AGS",
+    "percentage": 65.0
+  },
+  {
+    "source": "BIM",
+    "target": "HKT",
+    "percentage": 25.0
+  },
+  {
+    "source": "BIM",
+    "target": "KSM",
+    "percentage": 70.0
+  },
+  {
+    "source": "BIM",
+    "target": "KTM",
+    "percentage": 56.00000000000001
+  },
+  {
+    "source": "KAP",
+    "target": "KGA",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGR",
+    "target": "OIL",
+    "percentage": 85.0
+  },
+  {
+    "source": "BKI",
+    "target": "BKP",
+    "percentage": 18.0
+  },
+  {
+    "source": "BKI",
+    "target": "BMP",
+    "percentage": 18.0
+  },
+  {
+    "source": "BKI",
+    "target": "BPSP",
+    "percentage": 17.5
+  },
+  {
+    "source": "BKI",
+    "target": "INKP",
+    "percentage": 18.0
+  },
+  {
+    "source": "BKI",
+    "target": "KPI",
+    "percentage": 17.5
+  },
+  {
+    "source": "BKI",
+    "target": "KPS",
+    "percentage": 8.6
+  },
+  {
+    "source": "ASI",
+    "target": "KPM",
+    "percentage": 20.0
+  },
+  {
+    "source": "ASI",
+    "target": "RLP",
+    "percentage": 25.0
+  },
+  {
+    "source": "ASI",
+    "target": "BPM",
+    "percentage": 25.0
+  },
+  {
+    "source": "DYI",
+    "target": "DEV",
+    "percentage": 50.0
+  },
+  {
+    "source": "KGA",
+    "target": "KAP",
+    "percentage": 50.0
+  },
+  {
+    "source": "KGA",
+    "target": "LLT",
+    "percentage": 40.0
+  },
+  {
+    "source": "SDN",
+    "target": "ADA",
+    "percentage": 50.0
+  },
+  {
+    "source": "SDN",
+    "target": "DAN",
+    "percentage": 98.0
+  },
+  {
+    "source": "GAI",
+    "target": "DAS",
+    "percentage": 99.0
+  },
+  {
+    "source": "GAI",
+    "target": "NVA",
+    "percentage": 98.0
+  },
+  {
+    "source": "GAI",
+    "target": "TTS",
+    "percentage": 99.0
+  },
+  {
+    "source": "GAI",
+    "target": "KGA",
+    "percentage": 99.0
+  },
+  {
+    "source": "GAI",
+    "target": "JPD",
+    "percentage": 50.0
+  },
+  {
+    "source": "HKT",
+    "target": "TBSB",
+    "percentage": 70.0
+  },
+  {
+    "source": "AGG",
+    "target": "ADA",
+    "percentage": 50.0
+  },
+  {
+    "source": "AGG",
+    "target": "BGM",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "BIM",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "ASI",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "BIA",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "GAI",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "DAS",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "NVA",
+    "percentage": 2.0
+  },
+  {
+    "source": "AGG",
+    "target": "TTS",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "JACA",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "PHP",
+    "percentage": 1.0
+  },
+  {
+    "source": "AGG",
+    "target": "AAA",
+    "percentage": 1.0
+  },
+  {
+    "source": "KPM",
+    "target": "JAS",
+    "percentage": 40.0
+  },
+  {
+    "source": "KSI",
+    "target": "KSK",
+    "percentage": 50.0
+  }
+];
+        
+        let currentView = 'company';
+        let selectedCompany = 'ACG';
+        let currentRoot = 'ACG';
+        let highlightedRoot = 'ACG';
+        let showingHighlighted = false;
+        
+        // Build NetworkX-like graph
+        const graph = {
+            nodes: {},
+            edges: [],
+            predecessors: function(node) {
+                return this.edges.filter(e => e.target === node).map(e => e.source);
+            },
+            successors: function(node) {
+                return this.edges.filter(e => e.source === node).map(e => e.target);
+            }
+        };
+        
+        // Initialize graph
+        nodes.forEach(node => {
+            graph.nodes[node.id] = node;
+        });
+        graph.edges = edges;
+        
+        // Exact same layout functions as Streamlit app
+        function verticalTreeLayout(nodes, edges, levelGap = 25.0, isHighlighted = false) {
+            const pos = {};
+            const visited = new Set();
+            const levels = {};
+            
+            // Find root nodes
+            const roots = nodes.filter(node => 
+                !edges.some(edge => edge.target === node.id)
+            );
+            
+            if (roots.length === 0) return pos;
+            
+            // BFS to assign levels
+            const queue = roots.map(root => ({node: root, level: 0}));
+            roots.forEach(root => {
+                levels[0] = levels[0] || [];
+                levels[0].push(root);
+                visited.add(root.id);
+            });
+            
+            while (queue.length > 0) {
+                const {node, level} = queue.shift();
+                const children = edges.filter(e => e.source === node.id);
+                
+                children.forEach(edge => {
+                    const child = nodes.find(n => n.id === edge.target);
+                    if (child && !visited.has(child.id)) {
+                        visited.add(child.id);
+                        const childLevel = level + 1;
+                        levels[childLevel] = levels[childLevel] || [];
+                        levels[childLevel].push(child);
+                        queue.push({node: child, level: childLevel});
+                    }
+                });
+            }
+            
+            // Position nodes with much more spacing for highlighted view
+            Object.keys(levels).forEach(level => {
+                const levelNodes = levels[level];
+                const actualLevelGap = isHighlighted ? levelGap * 0.5 : levelGap; // MUCH MORE compressed vertically when highlighted
+                const y = -level * actualLevelGap;
+                const spread = Math.max(isHighlighted ? 1200 : 50, levelNodes.length * (isHighlighted ? 200 : 10)); // EXTREME WIDE horizontal spread when highlighted
+                
+                levelNodes.forEach((node, i) => {
+                    const x = levelNodes.length > 1 ? 
+                        -spread/2 + i * (spread/(levelNodes.length-1)) : 0;
+                    pos[node.id] = {x, y};
+                });
+            });
+            
+            return pos;
+        }
+        
+        function getSubgraphForCompany(selectedNode) {
+            const parents = graph.predecessors(selectedNode);
+            const allSiblings = new Set();
+            
+            parents.forEach(parent => {
+                graph.successors(parent).forEach(sibling => {
+                    allSiblings.add(sibling);
+                });
+            });
+            
+            const directSubsidiaries = new Set(graph.successors(selectedNode));
+            const allNodes = new Set([...parents, ...allSiblings, ...directSubsidiaries]);
+            
+            if (parents.length === 0) {
+                allNodes.add(selectedNode);
+                directSubsidiaries.forEach(sub => allNodes.add(sub));
+            }
+            
+            return {
+                nodes: Array.from(allNodes).map(id => graph.nodes[id]).filter(Boolean),
+                edges: edges.filter(e => allNodes.has(e.source) && allNodes.has(e.target))
+            };
+        }
+        
+        function verticalSubgraphLayout(subgraph, selectedNode) {
+            const pos = {};
+            const parents = graph.predecessors(selectedNode);
+            const siblings = new Set();
+            
+            parents.forEach(parent => {
+                graph.successors(parent).forEach(sibling => {
+                    siblings.add(sibling);
+                });
+            });
+            siblings.delete(selectedNode);
+            
+            const subsidiaries = graph.successors(selectedNode);
+            
+            // Position parents at top (y=2)
+            parents.forEach((parent, i) => {
+                pos[parent] = {x: i - (parents.length-1)/2, y: 2};
+            });
+            
+            // Position siblings and selected node at middle (y=1)
+            const allMiddleNodes = [selectedNode, ...Array.from(siblings)];
+            allMiddleNodes.sort((a, b) => {
+                const nameA = graph.nodes[a]?.name || a;
+                const nameB = graph.nodes[b]?.name || b;
+                return nameA.localeCompare(nameB);
+            });
+            
+            allMiddleNodes.forEach((node, i) => {
+                pos[node] = {x: i - (allMiddleNodes.length-1)/2, y: 1};
+            });
+            
+            // Position subsidiaries at bottom (y=0)
+            subsidiaries.forEach((sub, i) => {
+                pos[sub] = {x: i - (subsidiaries.length-1)/2, y: 0};
+            });
+            
+            return pos;
+        }
+        
+        function createVisualization(graphData, selectedNode = null, isSubgraph = false, isHighlighted = false) {
+            const pos = isSubgraph ? 
+                verticalSubgraphLayout(graphData, selectedNode) :
+                verticalTreeLayout(graphData.nodes, graphData.edges, 25.0, isHighlighted);
+            
+            // Create edge traces
+            const edgeX = [], edgeY = [];
+            const annotations = [];
+            
+            graphData.edges.forEach(edge => {
+                const source = pos[edge.source];
+                const target = pos[edge.target];
+                if (source && target) {
+                    edgeX.push(source.x, target.x, null);
+                    edgeY.push(source.y, target.y, null);
+                    
+                    // Add percentage annotation
+                    const mx = (source.x + target.x) / 2;
+                    const my = (source.y + target.y) / 2;
+                    let label = '<b>?</b>';
+                    
+                    if (edge.percentage !== null && edge.percentage !== undefined) {
+                        try {
+                            const perc = Math.round(parseFloat(edge.percentage));
+                            label = `<b>${perc}%</b>`;
+                        } catch (e) {
+                            label = `<b>${edge.percentage}</b>`;
+                        }
+                    }
+                    
+                    annotations.push({
+                        x: mx, y: my,
+                        text: label,
+                        showarrow: false,
+                        font: {color: 'red', size: isSubgraph ? 8 : (isHighlighted ? 6 : 8)}, // Smaller ownership font for subgraph to reduce overlap
+                        align: 'center'
+                    });
+                }
+            });
+            
+            const edgeTrace = {
+                x: edgeX, y: edgeY,
+                mode: 'lines',
+                line: {width: isSubgraph ? 3 : 1.5, color: '#B0B0B0'},
+                hoverinfo: 'none'
+            };
+            
+            // Create node traces
+            const nodeX = [], nodeY = [], nodeText = [], nodeColors = [], nodeSizes = [], nodeHover = [];
+            
+            graphData.nodes.forEach(node => {
+                const position = pos[node.id];
+                if (position) {
+                    nodeX.push(position.x);
+                    nodeY.push(position.y);
+                    nodeText.push(node.abbr);
+                    nodeHover.push(node.name);
+                    
+                    // Color coding exactly like Streamlit
+                    if (node.id === selectedNode) {
+                        nodeColors.push('#FFC107'); // Yellow for selected
+                        nodeSizes.push(isSubgraph ? 50 : (isHighlighted ? 35 : 45)); // Much smaller when highlighted to prevent overlap
+                    } else if (selectedNode && graph.predecessors(selectedNode).includes(node.id)) {
+                        nodeColors.push('#1976D2'); // Blue for parent
+                        nodeSizes.push(40);
+                    } else if (selectedNode && graph.successors(selectedNode).includes(node.id)) {
+                        nodeColors.push('#43A047'); // Green for subsidiary
+                        nodeSizes.push(40);
+                    } else if (isHighlighted && isInSubgraph(node.id, selectedNode)) {
+                        nodeColors.push('#FF5722'); // Orange for highlighted subgraph nodes
+                        nodeSizes.push(25); // Much smaller size to prevent overlap
+                    } else {
+                        nodeColors.push(isSubgraph ? '#FFFFFF' : (isHighlighted ? '#666666' : '#1976D2')); // Dimmed background nodes when highlighting
+                        nodeSizes.push(isSubgraph ? 35 : (isHighlighted ? 15 : 30)); // Tiny background nodes when highlighting
+                    }
+                }
+            });
+            
+            const nodeTrace = {
+                x: nodeX, y: nodeY,
+                mode: 'markers+text',
+                text: nodeText,
+                customdata: nodeText,
+                textfont: {color: 'white', size: isSubgraph ? 12 : (isHighlighted ? 8 : 10), family: 'Arial'}, // Smaller text when highlighted
+                textposition: 'bottom center',
+                marker: {
+                    color: nodeColors,
+                    size: nodeSizes,
+                    line: {width: isSubgraph ? 6 : 4, color: '#FFFFFF'},
+                    opacity: 0.95,
+                    symbol: 'circle'
+                },
+                hovertext: nodeHover,
+                hovertemplate: '%{hovertext}<extra></extra>'
+            };
+            
+            const layout = {
+                font: {color: 'white', size: 18, family: 'Arial'},
+                showlegend: false,
+                hovermode: 'closest',
+                margin: {b: 40, l: 5, r: 5, t: isSubgraph ? 40 : 80},
+                xaxis: {showgrid: false, zeroline: false, showticklabels: false},
+                yaxis: {showgrid: false, zeroline: false, showticklabels: false},
+                plot_bgcolor: '#181825',
+                paper_bgcolor: '#181825',
+                annotations: annotations,
+                height: isSubgraph ? 600 : (isHighlighted ? 800 : 1200), // Much shorter when highlighted
+                autosize: true
+            };
+            
+            return {data: [edgeTrace, nodeTrace], layout};
+        }
+        
+        function isInSubgraph(nodeId, selectedNode) {
+            if (!selectedNode) return false;
+            const subgraph = getSubgraphForCompany(selectedNode);
+            return subgraph.nodes.some(n => n.id === nodeId);
+        }
+        
+        // Initialize the app
+        function initializeApp() {
+            // Get only connected tree nodes (filter out isolated companies)
+            const treeNodes = getConnectedTreeNodes(currentRoot);
+            
+            // Populate company dropdown - ONLY with connected tree nodes
+            const select = document.getElementById('companySelect');
+            const sortedNodes = treeNodes.sort((a, b) => a.name.localeCompare(b.name));
+            
+            sortedNodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = node.name;
+                select.appendChild(option);
+            });
+            
+            // Set default selection
+            select.value = currentRoot;
+            selectCompany();
+        }
+        
+        function switchView() {
+            const viewMode = document.querySelector('input[name="viewMode"]:checked').value;
+            currentView = viewMode;
+            
+            if (viewMode === 'company') {
+                document.getElementById('companyView').style.display = 'block';
+                document.getElementById('masterView').style.display = 'none';
+                
+                // Repopulate dropdown for current root
+                const select = document.getElementById('companySelect');
+                select.innerHTML = '';
+                const treeNodes = getConnectedTreeNodes(currentRoot);
+                const sortedNodes = treeNodes.sort((a, b) => a.name.localeCompare(b.name));
+                
+                sortedNodes.forEach(node => {
+                    const option = document.createElement('option');
+                    option.value = node.id;
+                    option.textContent = node.name;
+                    select.appendChild(option);
+                });
+                
+                select.value = selectedCompany;
+                selectCompany();
+            } else {
+                document.getElementById('companyView').style.display = 'none';
+                document.getElementById('masterView').style.display = 'block';
+                document.getElementById('rootSelect').value = currentRoot;
+                showMasterGraph();
+            }
+        }
+        
+        function selectCompany() {
+            const select = document.getElementById('companySelect');
+            selectedCompany = select.value;
+            
+            if (!selectedCompany) return;
+            
+            // Show company info
+            const companyInfo = document.getElementById('companyInfo');
+            const companyDetails = document.getElementById('companyDetails');
+            const selectedNode = graph.nodes[selectedCompany];
+            
+            companyDetails.innerHTML = `
+                <b>Nama:</b> ${selectedNode.name}<br>
+                <b>Direktur:</b> -<br>
+                <b>Komisaris:</b> -<br>
+                <b>Modal:</b> -
+            `;
+            companyInfo.style.display = 'block';
+            
+            // Show subgraph
+            const subgraph = getSubgraphForCompany(selectedCompany);
+            const chartData = createVisualization(subgraph, selectedCompany, true);
+            
+            Plotly.newPlot('subgraphChart', chartData.data, chartData.layout, {
+                responsive: true,
+                displayModeBar: false,
+                useResizeHandler: true,
+                style: {width: "100%", height: "100%"}
+            });
+            
+            // Add click handler
+            document.getElementById('subgraphChart').on('plotly_click', function(data) {
+                if (data.points && data.points[0]) {
+                    const clickedNode = data.points[0].customdata;
+                    if (clickedNode && graph.nodes[clickedNode]) {
+                        document.getElementById('companySelect').value = clickedNode;
+                        selectCompany();
+                    }
+                }
+            });
+            
+            document.getElementById('showMasterBtn').style.display = 'block';
+            showingHighlighted = false;
+            document.getElementById('highlightedMaster').style.display = 'none';
+        }
+        
+        function showMasterGraph() {
+            // Get only connected tree nodes for master graph
+            const treeNodes = getConnectedTreeNodes(currentRoot);
+            const treeNodeIds = new Set(treeNodes.map(n => n.id));
+            const treeEdges = edges.filter(e => treeNodeIds.has(e.source) && treeNodeIds.has(e.target));
+            
+            const chartData = createVisualization({nodes: treeNodes, edges: treeEdges}, null, false);
+            
+            Plotly.newPlot('masterChart', chartData.data, chartData.layout, {
+                responsive: true,
+                displayModeBar: false,
+                useResizeHandler: true,
+                style: {width: "100%", height: "100%"}
+            });
+            
+            // Add click handler
+            document.getElementById('masterChart').on('plotly_click', function(data) {
+                if (data.points && data.points[0]) {
+                    const clickedNode = data.points[0].customdata;
+                    if (clickedNode && graph.nodes[clickedNode]) {
+                        // Switch to company view and update root if needed
+                        currentRoot = getNodeRoot(clickedNode);
+                        selectedCompany = clickedNode;
+                        document.querySelector('input[value="company"]').checked = true;
+                        switchView();
+                    }
+                }
+            });
+        }
+        
+        function showInMasterGraph() {
+            // Set highlighted root to the tree that contains the selected company
+            highlightedRoot = getNodeRoot(selectedCompany);
+            
+            // Update dropdown to show correct root
+            document.getElementById('highlightedRootSelect').value = highlightedRoot;
+            
+            // Show the selected tree with highlighting
+            const treeNodes = getConnectedTreeNodes(highlightedRoot);
+            const treeNodeIds = new Set(treeNodes.map(n => n.id));
+            const treeEdges = edges.filter(e => treeNodeIds.has(e.source) && treeNodeIds.has(e.target));
+            
+            const chartData = createVisualization({nodes: treeNodes, edges: treeEdges}, selectedCompany, false, true);
+            
+            Plotly.newPlot('highlightedChart', chartData.data, chartData.layout, {
+                responsive: true,
+                displayModeBar: false,
+                useResizeHandler: true,
+                style: {width: "100%", height: "100%"}
+            });
+            
+            // Force the highlighted chart to use full width
+            setTimeout(() => {
+                const chartDiv = document.getElementById('highlightedChart');
+                chartDiv.style.width = '100%';
+                chartDiv.style.maxWidth = '100%';
+                Plotly.Plots.resize('highlightedChart');
+            }, 100);
+            
+            document.getElementById('highlightedMaster').style.display = 'block';
+            showingHighlighted = true;
+        }
+        
+        function backToSubgraph() {
+            document.getElementById('highlightedMaster').style.display = 'none';
+            showingHighlighted = false;
+        }
+        
+        function selectRoot() {
+            const rootSelect = document.getElementById('rootSelect');
+            currentRoot = rootSelect.value;
+            showMasterGraph();
+        }
+        
+        function selectHighlightedRoot() {
+            const highlightedRootSelect = document.getElementById('highlightedRootSelect');
+            highlightedRoot = highlightedRootSelect.value;
+            
+            // Show the selected tree with highlighting
+            const treeNodes = getConnectedTreeNodes(highlightedRoot);
+            const treeNodeIds = new Set(treeNodes.map(n => n.id));
+            const treeEdges = edges.filter(e => treeNodeIds.has(e.source) && treeNodeIds.has(e.target));
+            
+            const chartData = createVisualization({nodes: treeNodes, edges: treeEdges}, selectedCompany, false, true);
+            
+            Plotly.newPlot('highlightedChart', chartData.data, chartData.layout, {
+                responsive: true,
+                displayModeBar: false,
+                useResizeHandler: true,
+                style: {width: "100%", height: "100%"}
+            });
+            
+            // Force the highlighted chart to use full width
+            setTimeout(() => {
+                const chartDiv = document.getElementById('highlightedChart');
+                chartDiv.style.width = '100%';
+                chartDiv.style.maxWidth = '100%';
+                Plotly.Plots.resize('highlightedChart');
+            }, 100);
+        }
+        
+        function getConnectedTreeNodes(rootId = 'ACG') {
+            const visited = new Set();
+            const queue = [rootId];
+            const treeNodes = new Set([rootId]);
+            
+            while (queue.length > 0) {
+                const current = queue.shift();
+                if (visited.has(current)) continue;
+                visited.add(current);
+                
+                // Add all subsidiaries to the tree
+                const subsidiaries = graph.successors(current);
+                subsidiaries.forEach(sub => {
+                    if (!treeNodes.has(sub)) {
+                        treeNodes.add(sub);
+                        queue.push(sub);
+                    }
+                });
+            }
+            
+            return Array.from(treeNodes).map(id => graph.nodes[id]).filter(Boolean);
+        }
+        
+        function getNodeRoot(nodeId) {
+            // Check if node belongs to ACG tree
+            const acgTree = getConnectedTreeNodes('ACG');
+            if (acgTree.some(n => n.id === nodeId)) {
+                return 'ACG';
+            }
+            
+            // Check if node belongs to AGG tree
+            const aggTree = getConnectedTreeNodes('AGG');
+            if (aggTree.some(n => n.id === nodeId)) {
+                return 'AGG';
+            }
+            
+            return 'ACG'; // Default fallback
+        }
+        
+        // Initialize when page loads
+        window.onload = initializeApp;
+    </script>
+</body>
+</html>
