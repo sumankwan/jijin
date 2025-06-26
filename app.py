@@ -2,10 +2,7 @@ import streamlit as st
 import networkx as nx
 import plotly.graph_objects as go
 import pandas as pd
-import requests
 from typing import Dict, List
-import json
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 import os
 from streamlit_plotly_events import plotly_events
 import re
@@ -18,9 +15,6 @@ st.set_page_config(
     page_icon="🏢",
     layout="wide"
 )
-
-# API Configuration
-API_URL = "http://localhost:8000"  # Change this in production
 
 # Title and description
 col1, col2 = st.columns([1, 5])
@@ -35,18 +29,24 @@ st.markdown("""
             min-width: 140px;
             max-width: 180px;
         }
+        @media (max-width: 768px) {
+            /* Mobile-specific styles */
+            .stPlotlyChart {
+                height: 400px !important;
+            }
+            .stButton > button {
+                width: 100% !important;
+                height: 40px !important;
+                font-size: 16px !important;
+            }
+            .stSelectbox > div > div {
+                font-size: 16px !important;
+            }
+        }
     </style>
 """, unsafe_allow_html=True)
 
-def fetch_companies() -> List[Dict]:
-    """Fetch companies from the API"""
-    response = requests.get(f"{API_URL}/companies/")
-    return response.json()
-
-def fetch_company_documents(company_id: int) -> List[Dict]:
-    """Fetch documents for a specific company"""
-    response = requests.get(f"{API_URL}/companies/{company_id}/documents")
-    return response.json()
+# Removed API functions - app now works completely locally with Excel data
 
 def create_network_graph(companies: List[Dict]):
     G = nx.DiGraph()
@@ -206,13 +206,14 @@ def create_visualization(G, force_hierarchical=False):
             font=dict(color='white', size=18, family='Arial'),
             showlegend=False,
             hovermode='closest',
-            margin=dict(b=40, l=20, r=20, t=80),
+            margin=dict(b=40, l=5, r=5, t=80),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor='#181825',
             paper_bgcolor='#181825',
             annotations=edge_text,
-            height=1200  # Increased height
+            height=1200,  # Increased height
+            autosize=True
         )
     )
 
@@ -236,20 +237,7 @@ def create_visualization(G, force_hierarchical=False):
         )
     return fig, node_order, pos
 
-def show_document_details(company_id: int):
-    """Display document details for a selected company"""
-    documents = fetch_company_documents(company_id)
-    
-    # st.subheader("Dokumen Perusahaan")
-    for doc in documents:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.write(f"**{doc['document_type']}**")
-            st.write(f"Nama file: {doc['name']}")
-        with col2:
-            if st.button("Lihat", key=f"view_{doc['id']}"):
-                # In a real app, this would open the PDF viewer
-                st.write(f"Opening document: {doc['name']}")
+# Document functionality removed for local deployment
 
 def abbreviate(name):
     name = name.strip()
@@ -371,7 +359,7 @@ def create_visualization_subgraph(G, selected_node, pos=None):
             label = "<b>?</b>"  # Or use '-' or 'N/A' if you prefer
         # Only add annotation if not already present at this location
         if not any(abs(mx - ann['x']) < 1e-6 and abs(my - ann['y']) < 1e-6 for ann in edge_text):
-            edge_text.append(dict(x=mx, y=my, text=label, showarrow=False, font=dict(color='red', size=14), align='center'))
+            edge_text.append(dict(x=mx, y=my, text=label, showarrow=False, font=dict(color='red', size=8), align='center'))
 
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
@@ -433,12 +421,13 @@ def create_visualization_subgraph(G, selected_node, pos=None):
             font=dict(color='white', size=18, family='Arial'),
             showlegend=False,
             hovermode='closest',
-            margin=dict(b=40, l=20, r=20, t=40),
+            margin=dict(b=40, l=5, r=5, t=40),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor='#181825',
             paper_bgcolor='#181825',
-            annotations=edge_text
+            annotations=edge_text,
+            autosize=True
         )
     )
 
